@@ -618,6 +618,10 @@ export const Devs = /* #__PURE__*/ Object.freeze({
         id: 291089948709486593n,
         badge: false,
     },
+    Tar: {
+        name: "Tar",
+        id: 985226198508511302n,
+    },
     thororen: {
         name: "thororen",
         id: 848339671629299742n

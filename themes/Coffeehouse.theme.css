@@ -1,0 +1,253 @@
+/**
+ * @name Coffeehouse
+ * @author Tar (fork)
+ * @version 2.0.0
+ * @description Dark espresso UI — full token overhaul (Visual Refresh + legacy). Use Appearance → Dark.
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dark · Coffeehouse — design tokens
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.theme-dark,
+.theme-dark .theme-dark,
+.theme-darker,
+.theme-darker .theme-darker,
+.theme-midnight,
+.theme-midnight .theme-midnight {
+    /* Cozier corners */
+    --radius-xs: 5px;
+    --radius-sm: 10px;
+    --radius-md: 14px;
+    --radius-lg: 18px;
+    --radius-xl: 22px;
+
+    /* Warmer elevation */
+    --shadow-border: 0 0 0 1px hsl(32 18% 24% / 0.45);
+    --shadow-low: 0 2px 6px hsl(20 30% 4% / 0.45);
+    --shadow-medium: 0 6px 18px hsl(20 35% 3% / 0.55);
+    --shadow-high: 0 16px 40px hsl(20 40% 2% / 0.6);
+    --shadow-top-high: 0 -12px 32px hsl(20 35% 3% / 0.45);
+
+    /* Cream “white” for overlays on dark */
+    --white-500-hsl: 38 calc(var(--saturation-factor, 1) * 22%) 96%;
+    --white-400-hsl: 36 calc(var(--saturation-factor, 1) * 18%) 92%;
+
+    /* Warm near-blacks */
+    --black-500-hsl: 25 calc(var(--saturation-factor, 1) * 12%) 5%;
+    --black-430-hsl: 26 calc(var(--saturation-factor, 1) * 11%) 8%;
+    --black-360-hsl: 27 calc(var(--saturation-factor, 1) * 10%) 12%;
+
+    /* Primary scale — brown paper / espresso depths (text uses low steps) */
+    --primary-100-hsl: 40 calc(var(--saturation-factor, 1) * 28%) 97%;
+    --primary-130-hsl: 38 calc(var(--saturation-factor, 1) * 26%) 94%;
+    --primary-160-hsl: 36 calc(var(--saturation-factor, 1) * 24%) 91%;
+    --primary-200-hsl: 35 calc(var(--saturation-factor, 1) * 22%) 88%;
+    --primary-230-hsl: 34 calc(var(--saturation-factor, 1) * 22%) 85%;
+    --primary-260-hsl: 33 calc(var(--saturation-factor, 1) * 20%) 80%;
+    --primary-300-hsl: 32 calc(var(--saturation-factor, 1) * 18%) 74%;
+    --primary-330-hsl: 32 calc(var(--saturation-factor, 1) * 17%) 68%;
+    --primary-345-hsl: 31 calc(var(--saturation-factor, 1) * 16%) 64%;
+    --primary-360-hsl: 31 calc(var(--saturation-factor, 1) * 15%) 60%;
+    --primary-400-hsl: 30 calc(var(--saturation-factor, 1) * 14%) 52%;
+    --primary-430-hsl: 30 calc(var(--saturation-factor, 1) * 14%) 45%;
+    --primary-460-hsl: 29 calc(var(--saturation-factor, 1) * 13%) 39%;
+    --primary-500-hsl: 29 calc(var(--saturation-factor, 1) * 13%) 33%;
+    --primary-530-hsl: 28 calc(var(--saturation-factor, 1) * 12%) 28%;
+    --primary-560-hsl: 28 calc(var(--saturation-factor, 1) * 12%) 24%;
+    --primary-600-hsl: 28 calc(var(--saturation-factor, 1) * 11%) 21%;
+    --primary-630-hsl: 27 calc(var(--saturation-factor, 1) * 12%) 17%;
+    --primary-645-hsl: 27 calc(var(--saturation-factor, 1) * 11%) 15%;
+    --primary-660-hsl: 26 calc(var(--saturation-factor, 1) * 11%) 13%;
+    --primary-700-hsl: 26 calc(var(--saturation-factor, 1) * 10%) 11%;
+    --primary-730-hsl: 25 calc(var(--saturation-factor, 1) * 10%) 9.5%;
+    --primary-760-hsl: 25 calc(var(--saturation-factor, 1) * 9%) 8%;
+    --primary-800-hsl: 24 calc(var(--saturation-factor, 1) * 9%) 6.5%;
+    --primary-830-hsl: 24 calc(var(--saturation-factor, 1) * 8%) 5%;
+    --primary-860-hsl: 23 calc(var(--saturation-factor, 1) * 8%) 4%;
+    --primary-900-hsl: 22 calc(var(--saturation-factor, 1) * 10%) 3%;
+
+    /* Brand — caramel / gold */
+    --brand-100-hsl: 48 calc(var(--saturation-factor, 1) * 85%) 94%;
+    --brand-160-hsl: 46 calc(var(--saturation-factor, 1) * 72%) 82%;
+    --brand-200-hsl: 44 calc(var(--saturation-factor, 1) * 65%) 72%;
+    --brand-230-hsl: 43 calc(var(--saturation-factor, 1) * 62%) 64%;
+    --brand-260-hsl: 43 calc(var(--saturation-factor, 1) * 58%) 56%;
+    --brand-300-hsl: 42 calc(var(--saturation-factor, 1) * 56%) 52%;
+    --brand-360-hsl: 42 calc(var(--saturation-factor, 1) * 58%) 54%;
+    --brand-400-hsl: 41 calc(var(--saturation-factor, 1) * 56%) 48%;
+    --brand-430-hsl: 40 calc(var(--saturation-factor, 1) * 54%) 44%;
+    --brand-460-hsl: 39 calc(var(--saturation-factor, 1) * 52%) 38%;
+    --brand-500-hsl: 39 calc(var(--saturation-factor, 1) * 55%) 44%;
+    --brand-530-hsl: 38 calc(var(--saturation-factor, 1) * 52%) 36%;
+    --brand-560-hsl: 37 calc(var(--saturation-factor, 1) * 50%) 30%;
+    --brand-600-hsl: 36 calc(var(--saturation-factor, 1) * 48%) 26%;
+
+    /* Semantic accents */
+    --green-360-hsl: 142 calc(var(--saturation-factor, 1) * 36%) 48%;
+    --green-430-hsl: 144 calc(var(--saturation-factor, 1) * 38%) 42%;
+    --red-400-hsl: 12 calc(var(--saturation-factor, 1) * 48%) 58%;
+    --red-430-hsl: 10 calc(var(--saturation-factor, 1) * 50%) 50%;
+    --yellow-300-hsl: 43 calc(var(--saturation-factor, 1) * 78%) 58%;
+
+    /* Refresh surfaces */
+    --background-base-lowest: #0a0806;
+    --background-base-lower: #0f0c09;
+    --background-base-low: #15120e;
+    --background-base-medium: #1c1712;
+    --background-base-high: #231c15;
+    --background-base-highest: #2a221a;
+
+    --background-mod-subtle: hsl(32 calc(var(--saturation-factor, 1) * 16%) 52% / 0.08);
+    --background-mod-normal: hsl(32 calc(var(--saturation-factor, 1) * 18%) 55% / 0.12);
+    --background-mod-strong: hsl(35 calc(var(--saturation-factor, 1) * 20%) 58% / 0.16);
+
+    --border-subtle: hsl(30 calc(var(--saturation-factor, 1) * 12%) 28% / 0.45);
+    --border-normal: hsl(32 calc(var(--saturation-factor, 1) * 14%) 34% / 0.55);
+    --border-strong: hsl(36 calc(var(--saturation-factor, 1) * 18%) 42% / 0.65);
+    --border-faint: hsl(38 calc(var(--saturation-factor, 1) * 22%) 72% / 0.08);
+
+    /* Typography tokens */
+    --text-primary: hsl(var(--primary-230-hsl) / 1);
+    --text-secondary: hsl(var(--primary-330-hsl) / 1);
+    --text-tertiary: hsl(var(--primary-400-hsl) / 1);
+    --text-muted: hsl(var(--primary-430-hsl) / 1);
+    --text-link: hsl(var(--brand-360-hsl) / 1);
+    --text-feedback-positive: hsl(var(--green-360-hsl) / 1);
+    --text-feedback-warning: hsl(var(--yellow-300-hsl) / 1);
+    --text-feedback-critical: hsl(var(--red-400-hsl) / 1);
+    --channel-text-area-placeholder: hsl(var(--primary-460-hsl) / 1);
+
+    /* Legacy + overlap */
+    --header-primary: hsl(var(--primary-230-hsl) / 1);
+    --header-secondary: hsl(var(--primary-360-hsl) / 1);
+    --text-normal: hsl(var(--primary-230-hsl) / 1);
+    --text-positive: hsl(var(--green-360-hsl) / 1);
+
+    --background-primary: #1a1510;
+    --background-secondary: #231c15;
+    --background-secondary-alt: #2e251c;
+    --background-tertiary: #120e0b;
+    --background-accent: #3d3228;
+    --background-floating: #2a221a;
+    --background-mobile-primary: #1a1510;
+    --background-mobile-secondary: #231c15;
+
+    --background-modifier-hover: hsl(38 calc(var(--saturation-factor, 1) * 35%) 58% / 0.1);
+    --background-modifier-active: hsl(38 calc(var(--saturation-factor, 1) * 40%) 55% / 0.16);
+    --background-modifier-selected: hsl(36 calc(var(--saturation-factor, 1) * 28%) 45% / 0.28);
+    --background-modifier-accent: hsl(0 0% 100% / 0.05);
+
+    --channeltextarea-background: #2a221a;
+    --activity-card-background: #231c15;
+    --input-background: hsl(var(--primary-800-hsl) / 1);
+    --redesign-chat-input-background: hsl(var(--primary-760-hsl) / 0.92);
+
+    --interactive-normal: hsl(var(--primary-330-hsl) / 1);
+    --interactive-hover: hsl(var(--primary-230-hsl) / 1);
+    --interactive-active: hsl(var(--primary-160-hsl) / 1);
+    --interactive-muted: hsl(var(--primary-460-hsl) / 1);
+
+    --brand-500: hsl(var(--brand-500-hsl) / 1);
+    --brand-360: hsl(var(--brand-360-hsl) / 1);
+    --brand-430: hsl(var(--brand-430-hsl) / 1);
+    --brand-260: hsl(var(--brand-500-hsl) / 0.22);
+    --brand-230: hsl(var(--brand-500-hsl) / 0.16);
+    --brand-200: hsl(var(--brand-500-hsl) / 0.1);
+    --brand-experiment-500: hsl(var(--brand-500-hsl) / 1);
+
+    --button-outline-brand-border: hsl(var(--brand-500-hsl) / 1);
+    --button-outline-brand-text: hsl(var(--primary-160-hsl) / 1);
+
+    --scrollbar-thin-thumb: #5c4d3d;
+    --scrollbar-thin-track: transparent;
+    --scrollbar-auto-thumb: #6b5a48;
+    --scrollbar-auto-track: #120e0b;
+    --scrollbar-auto-scrollbar-color-thumb: #6b5a48;
+    --scrollbar-auto-scrollbar-color-track: #15120e;
+
+    --focus-primary: hsl(var(--brand-360-hsl) / 1);
+
+    --status-positive: hsl(var(--green-360-hsl) / 1);
+    --status-danger: hsl(var(--red-400-hsl) / 1);
+    --status-warning: hsl(var(--yellow-300-hsl) / 1);
+    --status-yellow-400: hsl(var(--yellow-300-hsl) / 1);
+
+    --red-400: hsl(var(--red-400-hsl) / 1);
+    --green-360: hsl(var(--green-360-hsl) / 1);
+    --yellow-300: hsl(var(--yellow-300-hsl) / 1);
+
+    --mention-background: hsl(var(--brand-500-hsl) / 0.2);
+    --background-mentioned: hsl(var(--brand-500-hsl) / 0.12);
+    --background-mentioned-hover: hsl(var(--brand-500-hsl) / 0.18);
+
+    /* Redesign / activity cards */
+    --redesign-activity-card-background: hsl(var(--primary-630-hsl) / 1);
+    --redesign-activity-card-background-pressed: hsl(var(--primary-660-hsl) / 1);
+    --redesign-activity-card-border: hsl(32 calc(var(--saturation-factor, 1) * 14%) 32% / 0.5);
+    --redesign-only-background-default: hsl(var(--primary-630-hsl) / 1);
+    --redesign-only-background-sunken: hsl(var(--primary-730-hsl) / 1);
+    --redesign-only-background-raised: hsl(var(--primary-600-hsl) / 1);
+    --redesign-only-background-overlay: hsl(var(--primary-645-hsl) / 1);
+    --redesign-button-secondary-background: hsl(var(--primary-560-hsl) / 1);
+    --redesign-button-secondary-pressed-background: hsl(var(--primary-530-hsl) / 1);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UX layer — readable, calm, consistent (does not depend on hashed classes)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.theme-dark ::selection,
+.theme-darker ::selection,
+.theme-midnight ::selection {
+    background-color: hsl(42 65% 50% / 0.35);
+    color: #fffdf8;
+}
+
+.theme-dark,
+.theme-dark *,
+.theme-darker,
+.theme-darker *,
+.theme-midnight,
+.theme-midnight * {
+    scrollbar-color: var(--scrollbar-auto-scrollbar-color-thumb) var(--scrollbar-auto-scrollbar-color-track);
+}
+
+.theme-dark ::-webkit-scrollbar-thumb,
+.theme-darker ::-webkit-scrollbar-thumb,
+.theme-midnight ::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #7a6554 0%, #5a4a3c 100%);
+    border-radius: 10px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+}
+
+.theme-dark ::-webkit-scrollbar-track,
+.theme-darker ::-webkit-scrollbar-track,
+.theme-midnight ::-webkit-scrollbar-track {
+    background: var(--background-base-lower);
+}
+
+.theme-dark :focus-visible,
+.theme-darker :focus-visible,
+.theme-midnight :focus-visible {
+    outline: 2px solid hsl(var(--brand-360-hsl) / 0.85);
+    outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Light fallback (minimal — theme is built for dark)
+   ╟══════════════════════════════════════════════════════════════════════════ */
+
+.theme-light,
+.theme-light .theme-light {
+    --background-primary: #f7f0e6;
+    --background-secondary: #efe6d9;
+    --background-tertiary: #e8dcc8;
+    --header-primary: #2c1810;
+    --text-normal: #3d2918;
+    --text-muted: #7a6554;
+    --brand-500: #8b6914;
+    --brand-360: #a67c1a;
+    --channeltextarea-background: #efe6d9;
+}
