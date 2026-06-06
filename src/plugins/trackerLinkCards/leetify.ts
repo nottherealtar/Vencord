@@ -3,11 +3,28 @@
  */
 
 import { PluginNative } from "@utils/types";
+import { Message } from "@vencord/discord-types";
 
 const Native = VencordNative.pluginHelpers.TrackerLinkCards as PluginNative<typeof import("./native")>;
 
-export const LEETIFY_PROFILE_URL_RE =
-    /https?:\/\/(?:www\.)?leetify\.com\/app\/profile(?:\/s)?\/([a-zA-Z0-9-]+)/gi;
+/** Core profile path — steam64 (17 digits) or Leetify UUID. */
+const LEETIFY_PROFILE_ID_RE = /leetify\.com\/app\/profile(?:\/s)?\/([a-zA-Z0-9-]+)/i;
+
+/**
+ * Registered Leetify link shapes (free public URLs only).
+ * Add patterns here when Leetify introduces new share formats.
+ */
+const LEETIFY_LINK_PATTERNS: RegExp[] = [
+    // Plain / markdown-autolinked URLs
+    /https?:\/\/(?:www\.)?leetify\.com\/app\/profile(?:\/s)?\/[a-zA-Z0-9-]+(?:\?[^\s<>"')\]]*)?/gi,
+    // Discord markdown: [label](url)
+    /\[[^\]]*\]\((https?:\/\/(?:www\.)?leetify\.com\/app\/profile(?:\/s)?\/[a-zA-Z0-9-]+(?:\?[^\s)]*)?)\)/gi,
+    // Discord autolink: <url>
+    /<(https?:\/\/(?:www\.)?leetify\.com\/app\/profile(?:\/s)?\/[a-zA-Z0-9-]+(?:\?[^\s>]*)?)>/gi,
+];
+
+/** @deprecated Use messageContainsLeetifyLink or parseLeetifyUrls */
+export const LEETIFY_PROFILE_URL_RE = LEETIFY_LINK_PATTERNS[0];
 
 export interface LeetifyProfile {
     id: string;
@@ -43,23 +60,63 @@ export function clearLeetifyCache() {
     cache.clear();
 }
 
+function normalizeLeetifyUrl(raw: string): LeetifyParseResult | null {
+    const trimmed = raw.trim().replace(/[.,;:!?)]+$/, "");
+    const match = LEETIFY_PROFILE_ID_RE.exec(trimmed);
+    if (!match) return null;
+
+    const id = match[1];
+    const profileUrl = `https://leetify.com/app/profile/${id}`;
+
+    return { raw: trimmed, id, profileUrl };
+}
+
 export function parseLeetifyUrls(content: string): LeetifyParseResult[] {
+    if (!content) return [];
+
     const results: LeetifyParseResult[] = [];
-    LEETIFY_PROFILE_URL_RE.lastIndex = 0;
+    const seenIds = new Set<string>();
 
-    for (const match of content.matchAll(LEETIFY_PROFILE_URL_RE)) {
-        const raw = match[0];
-        const id = match[1];
-        if (results.some(r => r.raw === raw)) continue;
+    for (const pattern of LEETIFY_LINK_PATTERNS) {
+        pattern.lastIndex = 0;
 
-        results.push({
-            raw,
-            id,
-            profileUrl: raw.split("?")[0],
-        });
+        for (const match of content.matchAll(pattern)) {
+            const candidate = match[1] ?? match[0];
+            const parsed = normalizeLeetifyUrl(candidate);
+            if (!parsed || seenIds.has(parsed.id)) continue;
+
+            seenIds.add(parsed.id);
+            results.push(parsed);
+        }
     }
 
     return results;
+}
+
+export function parseLeetifyUrlsFromMessage(message: Message): LeetifyParseResult[] {
+    const sources = [message.content ?? ""];
+
+    for (const embed of message.embeds ?? []) {
+        if (embed.url) sources.push(embed.url);
+        if (embed.description) sources.push(embed.description);
+    }
+
+    const results: LeetifyParseResult[] = [];
+    const seenIds = new Set<string>();
+
+    for (const source of sources) {
+        for (const link of parseLeetifyUrls(source)) {
+            if (seenIds.has(link.id)) continue;
+            seenIds.add(link.id);
+            results.push(link);
+        }
+    }
+
+    return results;
+}
+
+export function messageContainsLeetifyLink(content: string): boolean {
+    return parseLeetifyUrls(content).length > 0;
 }
 
 function profileUrlFromId(id: string, steam64?: string) {

@@ -76,6 +76,9 @@ export function LeetifyTrackerCard({ link, apiKey }: Props) {
                         {formatWinrate(profile.winrate)} WR
                         {" · "}
                         {profile.total_matches.toLocaleString("en-US")} matches
+                        {profile.ranks.leetify != null && profile.ranks.leetify > 0 && (
+                            <> · Rating {formatRating(profile.ranks.leetify)}</>
+                        )}
                         {profile.ranks.faceit != null && profile.ranks.faceit > 0 && (
                             <> · Faceit L{profile.ranks.faceit}</>
                         )}

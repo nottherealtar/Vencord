@@ -1,6 +1,12 @@
+.vc-tracker-card-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.25rem;
+    margin-bottom: 0.1rem;
+}
+
 .vc-tracker-card {
-    margin-top: 0.35rem;
-    margin-bottom: 0.15rem;
     max-width: 432px;
     border-radius: 0 4px 4px 0;
     border-left: 4px solid #f84949;

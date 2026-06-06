@@ -23,8 +23,9 @@ import {
     fetchLeetifyProfile,
     formatShareBlock,
     formatShareMessage,
-    LEETIFY_PROFILE_URL_RE,
+    messageContainsLeetifyLink,
     parseLeetifyUrls,
+    parseLeetifyUrlsFromMessage,
 } from "./leetify";
 import { LeetifyTrackerCard } from "./TrackerCard";
 
@@ -36,7 +37,7 @@ const settings = definePluginSettings({
     },
     leetifyApiKey: {
         type: OptionType.STRING,
-        description: "Leetify API key from leetify.com/app/developer — saves automatically when you leave the field",
+        description: "Optional API key from leetify.com/app/developer — higher rate limits for stat cards (saves automatically)",
         default: "",
         onChange() {
             clearLeetifyCache();
@@ -123,13 +124,13 @@ const ShareStatsButton: ChatBarButtonFactory = ({ isAnyChat }) => {
 };
 
 function TrackerMessageAccessory({ message }: { message: Message; }) {
-    if (!settings.store.showCards || !message.content) return null;
+    if (!settings.store.showCards) return null;
 
-    const links = parseLeetifyUrls(message.content);
+    const links = parseLeetifyUrlsFromMessage(message);
     if (!links.length) return null;
 
     return (
-        <>
+        <div className="vc-tracker-card-stack">
             {links.map(link => (
                 <LeetifyTrackerCard
                     key={`${message.id}-${link.id}`}
@@ -137,7 +138,7 @@ function TrackerMessageAccessory({ message }: { message: Message; }) {
                     apiKey={settings.store.leetifyApiKey}
                 />
             ))}
-        </>
+        </div>
     );
 }
 
@@ -155,6 +156,8 @@ export default definePlugin({
     },
 
     renderMessageAccessory: props => <TrackerMessageAccessory message={props.message} />,
+    /** Just above Discord link embeds — same slot as MessageLinkEmbeds. */
+    messageAccessoryPosition: 4,
 
     commands: [{
         name: "cs2stats",
@@ -169,9 +172,8 @@ export default definePlugin({
 
     async onBeforeMessageSend(_, messageObj) {
         if (!settings.store.appendStatsOnSend || !messageObj.content) return;
-        if (!LEETIFY_PROFILE_URL_RE.test(messageObj.content)) return;
+        if (!messageContainsLeetifyLink(messageObj.content)) return;
 
-        LEETIFY_PROFILE_URL_RE.lastIndex = 0;
         const links = parseLeetifyUrls(messageObj.content);
         if (!links.length) return;
 
