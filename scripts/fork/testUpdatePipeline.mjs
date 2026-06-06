@@ -8,7 +8,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
-import { runAutoInject } from "./autoInject.mjs";
+import { runAutoInject, isDevInstallCurrent } from "./autoInject.mjs";
 import { readUpdaterSettings } from "./readUpdaterSettings.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -150,9 +150,12 @@ test("startupUpdate exits 0 when nothing to pull", () => {
 // --- Test B: autoInject standalone ---
 console.log("\nTest B — Auto-inject standalone:");
 
+test("dev install points at repo patcher.js (re-inject not needed after rebuild)", () => {
+    assert(isDevInstallCurrent(), "Expected dev install stub pointing at dist/patcher.js");
+});
+
 testOrSkip("autoInject patches Discord non-interactively", canInject, () => {
-    const skip = tryInject();
-    if (skip) throw new Error(`SKIP:${skip}`);
+    runAutoInject();
 });
 
 test("Discord Stable install is patched (app.asar points to patcher.js)", () => {
@@ -242,12 +245,7 @@ test("manual in-app update sequence succeeds", () => {
     assert(behind === "0", "Already behind — run Test D first or pull manually");
 
     execSync("node scripts/build/build.mjs", { cwd: ROOT, stdio: "inherit" });
-
-    const skip = canInject() ?? tryInject();
-    if (skip) {
-        console.log(`    (inject skipped — ${skip})`);
-        return;
-    }
+    runAutoInject();
 });
 
 // --- Summary ---
