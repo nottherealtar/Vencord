@@ -224,12 +224,26 @@ test("autoInject skips when autoInject=false", () => {
 // --- Test D: full startup update simulation (one commit behind) ---
 console.log("\nTest D — Full startup update (simulate being behind origin):");
 
-test("startupUpdate pulls and rebuilds when 1 commit behind", () => {
+testOrSkip("startupUpdate pulls and rebuilds when 1 commit behind", () => {
+    git(["fetch", "origin"]);
+    const branch = git(["branch", "--show-current"]);
+    const remote = `origin/${branch}`;
+    const behindOrigin = git(["rev-list", "--count", `HEAD..${remote}`]);
+    const aheadOfOrigin = git(["rev-list", "--count", `${remote}..HEAD`]);
+    if (behindOrigin !== "0" || aheadOfOrigin !== "0") {
+        return "HEAD must match origin exactly (push local commits or pull first)";
+    }
+    try {
+        git(["rev-parse", "HEAD~1"]);
+    } catch {
+        return "no parent commit to simulate being behind";
+    }
+    return null;
+}, () => {
+    const branch = git(["branch", "--show-current"]);
+    const remote = `origin/${branch}`;
     const headBefore = git(["rev-parse", "HEAD"]);
-    const behindCheck = git(["rev-list", "--count", `HEAD..origin/main`]);
-    assert(behindCheck === "0", "Must start in sync with origin for simulation setup");
 
-    // Stash any local WIP
     let stashed = false;
     try {
         const status = git(["status", "--porcelain"]);
@@ -241,8 +255,8 @@ test("startupUpdate pulls and rebuilds when 1 commit behind", () => {
 
     try {
         git(["reset", "--hard", "HEAD~1"]);
-        const behind = git(["rev-list", "--count", "HEAD..origin/main"]);
-        assert(behind === "1", `Expected 1 commit behind, got ${behind}`);
+        const behind = git(["rev-list", "--count", `HEAD..${remote}`]);
+        assert(behind === "1", `Expected 1 commit behind ${remote}, got ${behind}`);
 
         execFileSync(process.execPath, [join(ROOT, "scripts/fork/startupUpdate.mjs")], {
             cwd: ROOT,
@@ -270,12 +284,15 @@ test("startupUpdate pulls and rebuilds when 1 commit behind", () => {
 // --- Test E: in-app updater path (git pull + build + inject) ---
 console.log("\nTest E — In-app updater path (git fetch → pull → build → inject):");
 
-test("manual in-app update sequence succeeds", () => {
+testOrSkip("manual in-app update sequence succeeds", () => {
     git(["fetch", "origin"]);
     const branch = git(["branch", "--show-current"]);
     const behind = git(["rev-list", "--count", `HEAD..origin/${branch}`]);
-    assert(behind === "0", "Already behind — run Test D first or pull manually");
-
+    const ahead = git(["rev-list", "--count", `origin/${branch}..HEAD`]);
+    if (behind !== "0") return `${behind} commit(s) behind origin`;
+    if (ahead !== "0") return `${ahead} local commit(s) ahead of origin`;
+    return null;
+}, () => {
     execSync("node scripts/build/build.mjs", { cwd: ROOT, stdio: "inherit" });
     runAutoInject();
 });
@@ -286,7 +303,7 @@ const passed = results.filter(r => r.ok).length;
 const failed = results.filter(r => !r.ok);
 console.log(`${passed}/${results.length} passed${results.some(r => r.skipped) ? ` (${results.filter(r => r.skipped).length} skipped)` : ""}`);
 if (results.some(r => r.skipped)) {
-    console.log("\nSkipped (expected when Discord is open):");
+    console.log("\nSkipped:");
     for (const s of results.filter(r => r.skipped)) console.log(`  - ${s.name}: ${s.reason}`);
 }
 if (failed.length) {
