@@ -83,7 +83,7 @@ function Updater() {
 
             <FormSwitch
                 title="Automatically update"
-                description="Automatically update Vencord without confirmation prompt"
+                description="Check for updates on Discord launch and every 30 minutes. Pulls from your fork on GitHub, rebuilds, and loads the new version before Discord opens."
                 value={settings.autoUpdate}
                 onChange={(v: boolean) => settings.autoUpdate = v}
             />

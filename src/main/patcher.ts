@@ -18,12 +18,29 @@
 
 import { onceDefined } from "@shared/onceDefined";
 import electron, { app, BrowserWindowConstructorOptions, Menu } from "electron";
+import { execFileSync } from "child_process";
 import { dirname, join } from "path";
 
 import { RendererSettings } from "./settings";
 import { IS_VANILLA } from "./utils/constants";
 
 console.log("[Vencord] Starting up...");
+
+function maybeUpdateOnLaunch() {
+    if (IS_VANILLA || IS_UPDATER_DISABLED || IS_STANDALONE) return;
+    if (!RendererSettings.store.autoUpdate) return;
+
+    const srcDir = join(__dirname, "..");
+    try {
+        execFileSync(process.execPath, [join(srcDir, "scripts/fork/startupUpdate.mjs")], {
+            cwd: srcDir,
+            stdio: "inherit",
+            env: process.env
+        });
+    } catch (err) {
+        console.error("[Vencord] Startup update failed, continuing with current version:", err);
+    }
+}
 
 // Our injector file at app/index.js
 const injectorPath = require.main!.filename;
@@ -41,6 +58,8 @@ require.main!.filename = join(asarPath, discordPkg.main);
 app.setAppPath(asarPath);
 
 if (!IS_VANILLA) {
+    maybeUpdateOnLaunch();
+
     const settings = RendererSettings.store;
     // Repatch after host updates on Windows
     if (process.platform === "win32") {
