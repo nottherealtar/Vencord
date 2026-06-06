@@ -132,4 +132,5 @@ try {
     });
 } catch {
     console.error("Something went wrong. Please check the logs above.");
+    process.exit(1);
 }

@@ -5,11 +5,10 @@
  * Exit 0 = success or nothing to do. Exit 1 = failure.
  */
 
-import { execFileSync, execSync } from "child_process";
+import { execFileSync } from "child_process";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
-import { runAutoInject } from "./autoInject.mjs";
 import { readUpdaterSettings } from "./readUpdaterSettings.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -51,10 +50,12 @@ function main() {
         stdio: "inherit",
     });
 
-    console.log("[Vencord] Rebuilding...");
-    execSync("node scripts/build/build.mjs", { cwd: ROOT, stdio: "inherit" });
-
-    runAutoInject();
+    // Subprocess so build/inject always use scripts from the commit we just pulled
+    execFileSync(process.execPath, [join(ROOT, "scripts/fork/postUpdate.mjs")], {
+        cwd: ROOT,
+        stdio: "inherit",
+        env: { ...process.env, VENCORD_USER_DATA_DIR: process.env.VENCORD_USER_DATA_DIR ?? ROOT },
+    });
 
     console.log("[Vencord] Startup update complete");
 }
