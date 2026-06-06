@@ -9,6 +9,7 @@ import {
     formatPremier,
     formatRating,
     formatWinrate,
+    friendlyError,
     LeetifyParseResult,
     LeetifyProfile,
 } from "./leetify";
@@ -27,13 +28,14 @@ export function LeetifyTrackerCard({ link, apiKey }: Props) {
         let cancelled = false;
         setLoading(true);
         setError(null);
+        setProfile(null);
 
         fetchLeetifyProfile(link.id, apiKey)
             .then(data => {
                 if (!cancelled) setProfile(data);
             })
             .catch(err => {
-                if (!cancelled) setError(err?.message ?? String(err));
+                if (!cancelled) setError(friendlyError(err?.message ?? String(err)));
             })
             .finally(() => {
                 if (!cancelled) setLoading(false);
@@ -43,54 +45,54 @@ export function LeetifyTrackerCard({ link, apiKey }: Props) {
     }, [link.id, apiKey]);
 
     const premier = profile ? formatPremier(profile.ranks.premier) : null;
+    const openUrl = profile?.profileUrl ?? link.profileUrl;
 
     return (
         <div className="vc-tracker-card">
             <div className="vc-tracker-card-header">
                 <span className="vc-tracker-card-title">
-                    {profile?.name ?? `Profile ${link.id.slice(0, 8)}…`}
+                    {profile?.name ?? (link.id.length >= 17 ? "CS2 player" : "Leetify profile")}
                 </span>
-                <span className="vc-tracker-card-badge">CS2 · Leetify</span>
+                <span className="vc-tracker-card-badge">Leetify</span>
             </div>
 
             {loading && (
-                <div className="vc-tracker-card-loading">Loading stats…</div>
+                <div className="vc-tracker-card-loading">Loading CS2 stats…</div>
             )}
 
             {!loading && profile && (
-                <div className="vc-tracker-card-stats">
-                    {premier && <div>Premier {premier}</div>}
-                    <div>
+                <>
+                    {premier && (
+                        <div className="vc-tracker-card-row">Premier {premier}</div>
+                    )}
+                    <div className="vc-tracker-card-row">
                         Aim {formatRating(profile.rating.aim)}
-                        {" · "}
-                        Positioning {formatRating(profile.rating.positioning)}
-                        {" · "}
-                        Utility {formatRating(profile.rating.utility)}
+                        {" · Pos "}
+                        {formatRating(profile.rating.positioning)}
+                        {" · Util "}
+                        {formatRating(profile.rating.utility)}
                     </div>
-                    <div className="vc-tracker-card-meta">
-                        Win rate {formatWinrate(profile.winrate)}
+                    <div className="vc-tracker-card-row-muted">
+                        {formatWinrate(profile.winrate)} WR
                         {" · "}
                         {profile.total_matches.toLocaleString("en-US")} matches
+                        {profile.ranks.faceit != null && profile.ranks.faceit > 0 && (
+                            <> · Faceit L{profile.ranks.faceit}</>
+                        )}
                     </div>
-                </div>
+                </>
             )}
 
             {!loading && error && (
-                <div className="vc-tracker-card-error">
-                    {error.includes("non-user") || error.includes("not found")
-                        ? "No Leetify data — player may need to sign up at leetify.com with Steam."
-                        : error}
-                </div>
+                <div className="vc-tracker-card-error">{error}</div>
             )}
 
-            <div className="vc-tracker-card-meta">
-                <span
-                    className="vc-tracker-card-link"
-                    onClick={() => VencordNative.native.openExternal(profile?.profileUrl ?? link.profileUrl)}
-                >
-                    {profile?.profileUrl ?? link.profileUrl}
-                </span>
-            </div>
+            <span
+                className="vc-tracker-card-link"
+                onClick={() => VencordNative.native.openExternal(openUrl)}
+            >
+                Open on Leetify
+            </span>
         </div>
     );
 }

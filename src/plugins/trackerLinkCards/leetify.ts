@@ -2,10 +2,12 @@
  * Leetify URL parsing + Public CS API (https://api-public-docs.cs-prod.leetify.com/)
  */
 
+import { PluginNative } from "@utils/types";
+
+const Native = VencordNative.pluginHelpers.TrackerLinkCards as PluginNative<typeof import("./native")>;
+
 export const LEETIFY_PROFILE_URL_RE =
     /https?:\/\/(?:www\.)?leetify\.com\/app\/profile(?:\/s)?\/([a-zA-Z0-9-]+)/gi;
-
-const API_BASE = "https://api-public.cs-prod.leetify.com";
 
 export interface LeetifyProfile {
     id: string;
@@ -37,6 +39,10 @@ export interface LeetifyParseResult {
 const cache = new Map<string, { at: number; data: LeetifyProfile | null; error?: string; }>();
 const CACHE_MS = 5 * 60 * 1000;
 
+export function clearLeetifyCache() {
+    cache.clear();
+}
+
 export function parseLeetifyUrls(content: string): LeetifyParseResult[] {
     const results: LeetifyParseResult[] = [];
     LEETIFY_PROFILE_URL_RE.lastIndex = 0;
@@ -57,13 +63,13 @@ export function parseLeetifyUrls(content: string): LeetifyParseResult[] {
 }
 
 function profileUrlFromId(id: string, steam64?: string) {
-    if (steam64) return `https://leetify.com/app/profile/s/${steam64}`;
-    if (/^\d{17}$/.test(id)) return `https://leetify.com/app/profile/s/${id}`;
+    if (steam64) return `https://leetify.com/app/profile/${steam64}`;
+    if (/^\d{17}$/.test(id)) return `https://leetify.com/app/profile/${id}`;
     return `https://leetify.com/app/profile/${id}`;
 }
 
-function mapProfile(json: Record<string, unknown>, fallbackUrl: string): LeetifyProfile {
-    const id = String(json.id ?? "");
+function mapProfile(json: Record<string, unknown>, fallbackId: string): LeetifyProfile {
+    const id = String(json.id ?? fallbackId);
     const steam64 = json.steam64_id != null ? String(json.steam64_id) : undefined;
 
     return {
@@ -74,41 +80,26 @@ function mapProfile(json: Record<string, unknown>, fallbackUrl: string): Leetify
         total_matches: Number(json.total_matches ?? 0),
         ranks: (json.ranks ?? {}) as LeetifyProfile["ranks"],
         rating: (json.rating ?? {}) as LeetifyProfile["rating"],
-        profileUrl: profileUrlFromId(id || fallbackUrl, steam64),
+        profileUrl: profileUrlFromId(id, steam64),
     };
 }
 
 export async function fetchLeetifyProfile(id: string, apiKey?: string): Promise<LeetifyProfile> {
-    const cacheKey = `${id}:${apiKey ?? ""}`;
+    const cacheKey = `${id}:${apiKey?.trim() ?? ""}`;
     const hit = cache.get(cacheKey);
     if (hit && Date.now() - hit.at < CACHE_MS) {
         if (hit.data) return hit.data;
         throw new Error(hit.error ?? "Failed to load Leetify profile");
     }
 
-    const headers: Record<string, string> = { Accept: "application/json" };
-    if (apiKey?.trim()) headers.Authorization = `Bearer ${apiKey.trim()}`;
-
-    const res = await fetch(`${API_BASE}/v3/profile?id=${encodeURIComponent(id)}`, { headers });
+    const res = await Native.fetchProfile(id, apiKey?.trim() || undefined);
 
     if (!res.ok) {
-        let message = `${res.status} ${res.statusText}`;
-        try {
-            const err = await res.json();
-            if (err?.error) message = String(err.error);
-        } catch { /* ignore */ }
-
-        cache.set(cacheKey, { at: Date.now(), data: null, error: message });
-        throw new Error(message);
+        cache.set(cacheKey, { at: Date.now(), data: null, error: res.error });
+        throw new Error(res.error);
     }
 
-    const json = await res.json();
-    if (json?.error) {
-        cache.set(cacheKey, { at: Date.now(), data: null, error: String(json.error) });
-        throw new Error(String(json.error));
-    }
-
-    const profile = mapProfile(json, profileUrlFromId(id));
+    const profile = mapProfile(res.data as Record<string, unknown>, id);
     cache.set(cacheKey, { at: Date.now(), data: profile });
     return profile;
 }
@@ -148,4 +139,15 @@ export function formatShareMessage(profile: LeetifyProfile) {
 
 export function formatShareBlock(profile: LeetifyProfile) {
     return `\n\n${formatShareMessage(profile)}`;
+}
+
+export function friendlyError(message: string) {
+    const lower = message.toLowerCase();
+    if (lower.includes("rate limit")) {
+        return "Leetify rate limit — add an API key in plugin settings (saves automatically).";
+    }
+    if (lower.includes("non-user") || lower.includes("not found") || lower.includes("404")) {
+        return "No Leetify profile — player must sign up at leetify.com with Steam.";
+    }
+    return message;
 }

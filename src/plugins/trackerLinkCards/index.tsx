@@ -10,18 +10,19 @@
 
 import "./styles.css";
 
-import { addMessageAccessory, removeMessageAccessory } from "@api/MessageAccessories";
+import { ApplicationCommandInputType } from "@api/Commands";
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
-import { addMessagePreSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { definePluginSettings } from "@api/Settings";
-import { insertTextIntoChatInputBox } from "@utils/discord";
+import { insertTextIntoChatInputBox, sendMessage } from "@utils/discord";
 import definePlugin, { IconComponent, OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
 import { React, showToast, Toasts } from "@webpack/common";
 
 import {
+    clearLeetifyCache,
     fetchLeetifyProfile,
     formatShareBlock,
+    formatShareMessage,
     LEETIFY_PROFILE_URL_RE,
     parseLeetifyUrls,
 } from "./leetify";
@@ -30,13 +31,16 @@ import { LeetifyTrackerCard } from "./TrackerCard";
 const settings = definePluginSettings({
     mySteamId: {
         type: OptionType.STRING,
-        description: "Your Steam64 ID for the Share Stats button (17-digit number from your Steam profile URL)",
+        description: "Your Steam64 ID for Share Stats / /cs2stats (17-digit number from your Steam profile URL). Settings save automatically.",
         default: "",
     },
     leetifyApiKey: {
         type: OptionType.STRING,
-        description: "Optional Leetify API key from leetify.com/app/developer (better rate limits)",
+        description: "Leetify API key from leetify.com/app/developer — saves automatically when you leave the field",
         default: "",
+        onChange() {
+            clearLeetifyCache();
+        },
     },
     showCards: {
         type: OptionType.BOOLEAN,
@@ -59,20 +63,22 @@ const ShareStatsIcon: IconComponent = ({ height = 20, width = 20, className }) =
     </svg>
 );
 
-async function shareMyStats() {
-    const steamId = settings.store.mySteamId.trim().replace(/\D/g, "");
+function getMySteamId() {
+    return settings.store.mySteamId.trim().replace(/\D/g, "");
+}
+
+async function loadMyProfile() {
+    const steamId = getMySteamId();
     if (!steamId || steamId.length < 17) {
         showToast(
-            "Set your Steam64 ID in Tracker Link Cards settings first.\nOpen Steam → your profile → copy the number from the URL.",
+            "Set your Steam64 ID in Tracker Link Cards settings first.\nSteam profile URL → copy the 17-digit number.",
             Toasts.Type.MESSAGE
         );
-        return;
+        return null;
     }
 
     try {
-        const profile = await fetchLeetifyProfile(steamId, settings.store.leetifyApiKey);
-        insertTextIntoChatInputBox(formatShareBlock(profile).trimStart() + " ");
-        showToast("CS2 stats inserted — press Enter to send", Toasts.Type.SUCCESS);
+        return await fetchLeetifyProfile(steamId, settings.store.leetifyApiKey);
     } catch (err: any) {
         const msg = err?.message ?? String(err);
         if (msg.toLowerCase().includes("rate limit")) {
@@ -83,16 +89,33 @@ async function shareMyStats() {
                 Toasts.Type.FAILURE
             );
         }
+        return null;
     }
 }
 
-const ShareStatsButton: ChatBarButtonFactory = ({ isMainChat }) => {
-    if (!isMainChat) return null;
+async function insertMyStats() {
+    const profile = await loadMyProfile();
+    if (!profile) return;
+
+    insertTextIntoChatInputBox(formatShareMessage(profile) + " ");
+    showToast("CS2 stats inserted — press Enter to send", Toasts.Type.SUCCESS);
+}
+
+async function sendMyStats(channelId: string) {
+    const profile = await loadMyProfile();
+    if (!profile) return;
+
+    await sendMessage(channelId, { content: formatShareMessage(profile) });
+    showToast("CS2 stats posted", Toasts.Type.SUCCESS);
+}
+
+const ShareStatsButton: ChatBarButtonFactory = ({ isAnyChat }) => {
+    if (!isAnyChat) return null;
 
     return (
         <ChatBarButton
             tooltip="Share my CS2 stats (Leetify)"
-            onClick={() => void shareMyStats()}
+            onClick={() => void insertMyStats()}
         >
             <ShareStatsIcon />
         </ChatBarButton>
@@ -118,13 +141,12 @@ function TrackerMessageAccessory({ message }: { message: Message; }) {
     );
 }
 
-let preSendListener: ((channelId: string, messageObj: { content: string; }) => Promise<void>) | undefined;
-
 export default definePlugin({
     name: "TrackerLinkCards",
-    description: "CS2 Leetify link cards and one-click stat sharing for your stack",
+    description: "CS2 Leetify link cards and one-click stat sharing for your stack. Chat bar button (right of input) or /cs2stats.",
     tags: ["CS2", "Chat", "Gaming"],
     authors: [{ name: "nottherealtar", id: 0n }],
+    requiresRestart: false,
     settings,
 
     chatBarButton: {
@@ -132,37 +154,34 @@ export default definePlugin({
         render: ShareStatsButton,
     },
 
+    renderMessageAccessory: props => <TrackerMessageAccessory message={props.message} />,
+
+    commands: [{
+        name: "cs2stats",
+        description: "Post your CS2 Leetify stats in this channel",
+        inputType: ApplicationCommandInputType.BUILT_IN,
+        execute: async (_, ctx) => sendMyStats(ctx.channel.id),
+    }],
+
     start() {
-        addMessageAccessory("TrackerLinkCards", props => (
-            <TrackerMessageAccessory message={props.message} />
-        ), 4);
-
-        preSendListener = async (_, messageObj) => {
-            if (!settings.store.appendStatsOnSend || !messageObj.content) return;
-            if (!LEETIFY_PROFILE_URL_RE.test(messageObj.content)) return;
-
-            LEETIFY_PROFILE_URL_RE.lastIndex = 0;
-            const links = parseLeetifyUrls(messageObj.content);
-            if (!links.length) return;
-
-            // Skip if we already appended a stat block for this link.
-            if (/· CS2 \(Leetify\)/.test(messageObj.content)) return;
-
-            const link = links[0];
-
-            try {
-                const profile = await fetchLeetifyProfile(link.id, settings.store.leetifyApiKey);
-                messageObj.content += formatShareBlock(profile);
-            } catch {
-                // Keep the raw link if stats aren't available.
-            }
-        };
-
-        addMessagePreSendListener(preSendListener);
+        clearLeetifyCache();
     },
 
-    stop() {
-        removeMessageAccessory("TrackerLinkCards");
-        if (preSendListener) removeMessagePreSendListener(preSendListener);
+    async onBeforeMessageSend(_, messageObj) {
+        if (!settings.store.appendStatsOnSend || !messageObj.content) return;
+        if (!LEETIFY_PROFILE_URL_RE.test(messageObj.content)) return;
+
+        LEETIFY_PROFILE_URL_RE.lastIndex = 0;
+        const links = parseLeetifyUrls(messageObj.content);
+        if (!links.length) return;
+
+        if (/· CS2 \(Leetify\)/.test(messageObj.content)) return;
+
+        try {
+            const profile = await fetchLeetifyProfile(links[0].id, settings.store.leetifyApiKey);
+            messageObj.content += formatShareBlock(profile);
+        } catch {
+            // Keep the raw link if stats aren't available.
+        }
     },
 });
