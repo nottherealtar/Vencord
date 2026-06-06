@@ -1,0 +1,50 @@
+name: Sync upstream Vencord
+
+on:
+    schedule:
+        # Daily at 06:00 UTC
+        - cron: "0 6 * * *"
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    sync:
+        if: github.repository != 'Vendicated/Vencord'
+        runs-on: ubuntu-latest
+
+        steps:
+            - uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+                  token: ${{ secrets.GITHUB_TOKEN }}
+
+            - name: Sync from upstream
+              run: |
+                  git config user.name "github-actions[bot]"
+                  git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+                  git remote add upstream https://github.com/Vendicated/Vencord.git
+                  git fetch upstream main
+
+                  if git merge-base --is-ancestor HEAD upstream/main; then
+                      echo "Already up to date with upstream"
+                      exit 0
+                  fi
+
+                  git merge upstream/main --no-edit -m "Sync upstream Vencord ($(date -u +%Y-%m-%d))"
+                  git push origin main
+
+            - uses: pnpm/action-setup@v3
+
+            - name: Use Node.js 20
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+                  cache: "pnpm"
+
+            - name: Verify build after sync
+              run: |
+                  pnpm install --frozen-lockfile
+                  pnpm build

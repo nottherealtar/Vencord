@@ -152,8 +152,7 @@ async function init() {
     if (!IS_WEB && !IS_UPDATER_DISABLED) {
         runUpdateCheck();
 
-        // this tends to get really annoying, so only do this if the user has auto-update without notification enabled
-        if (Settings.autoUpdate && !Settings.autoUpdateNotification) {
+        if (Settings.autoUpdate) {
             setInterval(runUpdateCheck, 1000 * 60 * 30); // 30 minutes
         }
     }
