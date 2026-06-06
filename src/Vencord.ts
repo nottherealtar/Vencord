@@ -102,16 +102,18 @@ async function syncSettings() {
 }
 
 let notifiedForUpdatesThisSession = false;
-let updatedThisSession = false;
 
-async function runUpdateCheck() {
+async function runUpdateCheck(allowAutoApply = true) {
     if (IS_UPDATER_DISABLED) return;
 
-    // Startup update already pulled + rebuilt before Discord opened
-    if (VencordNative.updater.didRunOnLaunch()) return;
+    const session = VencordNative.updater.getSession();
+    if (session.updatedThisSession || session.updateInProgress) return;
 
-    // Never run twice in one session — avoids pull/rebuild loops
-    if (updatedThisSession) return;
+    // Discord desktop: launch pipeline owns all auto-updates — renderer never pulls/rebuilds
+    const canAutoApply = allowAutoApply
+        && Settings.autoUpdate
+        && !IS_DISCORD_DESKTOP
+        && VencordNative.updater.canAutoApply();
 
     const notify = (data: NotificationData) => {
         if (notifiedForUpdatesThisSession) return;
@@ -128,9 +130,9 @@ async function runUpdateCheck() {
         const isOutdated = await checkForUpdates();
         if (!isOutdated) return;
 
-        if (Settings.autoUpdate) {
-            await update();
-            updatedThisSession = true;
+        if (canAutoApply) {
+            if (!await update()) return;
+
             if (Settings.autoUpdateNotification) {
                 notify({
                     title: "Vencord has been updated!",
@@ -143,7 +145,9 @@ async function runUpdateCheck() {
 
         notify({
             title: "A Vencord update is available!",
-            body: "Click here to view the update",
+            body: session.launchUpdateRan
+                ? "Restart Discord to fetch and apply the update"
+                : "Open Updater settings to install, or enable auto-update",
             onClick: () => openSettingsTabModal(UpdaterTab!)
         });
     } catch (err) {
@@ -158,11 +162,10 @@ async function init() {
     syncSettings();
 
     if (!IS_WEB && !IS_UPDATER_DISABLED) {
-        runUpdateCheck();
+        runUpdateCheck(true);
 
-        if (Settings.autoUpdate) {
-            setInterval(runUpdateCheck, 1000 * 60 * 30); // 30 minutes
-        }
+        // Periodic check notifies only — never auto-applies mid-session
+        setInterval(() => runUpdateCheck(false), 1000 * 60 * 30);
     }
 
     if (IS_DEV) {

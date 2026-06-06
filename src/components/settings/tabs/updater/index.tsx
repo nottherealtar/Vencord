@@ -69,6 +69,7 @@ function Updater() {
         "autoUpdate",
         "autoUpdateNotification",
         "autoInject",
+        "startupUpdateSplash",
         "discordInstallBranch",
         "discordInstallLocation"
     ]);
@@ -89,9 +90,16 @@ function Updater() {
 
             <FormSwitch
                 title="Automatically update"
-                description="Check for updates on Discord launch and every 30 minutes. Pulls from your fork on GitHub, rebuilds, injects, and loads the new version before Discord opens."
+                description="On Discord launch, pull from your fork, rebuild, relaunch once, then open with a consistent build. Also checks every 30 minutes (notify only)."
                 value={settings.autoUpdate}
                 onChange={(v: boolean) => settings.autoUpdate = v}
+            />
+            <FormSwitch
+                title="Show update splash on relaunch"
+                description="Brief splash while Discord restarts after a startup update"
+                value={settings.startupUpdateSplash}
+                onChange={(v: boolean) => settings.startupUpdateSplash = v}
+                disabled={!settings.autoUpdate}
             />
             <FormSwitch
                 title="Automatically inject after update"

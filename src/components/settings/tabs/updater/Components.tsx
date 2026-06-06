@@ -96,7 +96,7 @@ export function Updatable(props: CommonProps) {
                     <Button
                         disabled={isUpdating || isChecking}
                         onClick={runWithDispatch(setIsUpdating, async () => {
-                            if (await update()) {
+                            if (await update(true)) {
                                 setUpdates([]);
 
                                 await new Promise<void>(r => {

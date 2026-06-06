@@ -20,62 +20,74 @@ import { app, net, protocol } from "electron";
 import { join } from "path";
 import { pathToFileURL } from "url";
 
+import { runLaunchPipeline } from "./bootstrap/launchPipeline";
 import { initCsp } from "./csp";
-import { ensureSafePath } from "./ipcMain";
 import { RendererSettings } from "./settings";
 import { IS_VANILLA, THEMES_DIR } from "./utils/constants";
 import { installExt } from "./utils/extensions";
+import { ensureSafePath } from "./utils/safePath";
 
-if (IS_VESKTOP || !IS_VANILLA) {
-    app.whenReady().then(() => {
-        protocol.handle("vencord", ({ url: unsafeUrl }) => {
-            let url = decodeURI(unsafeUrl).slice("vencord://".length).replace(/\?v=\d+$/, "");
+// Settings must load first (launch pipeline reads autoUpdate from here).
+import "./settings";
 
-            if (url.endsWith("/")) url = url.slice(0, -1);
+/**
+ * Bootstrap order:
+ * 1. settings (above)
+ * 2. launch pipeline — update / relaunch decision BEFORE ipcMain or Discord
+ * 3. ipcMain + patcher + Discord (only if not relaunching)
+ */
+const launchOutcome = IS_DISCORD_DESKTOP ? runLaunchPipeline() : "continue";
 
-            if (url.startsWith("/themes/")) {
-                const theme = url.slice("/themes/".length);
+if (launchOutcome === "continue") {
+    require("./ipcMain");
 
-                const safeUrl = ensureSafePath(THEMES_DIR, theme);
-                if (!safeUrl) {
-                    return new Response(null, {
-                        status: 404
-                    });
+    if (IS_VESKTOP || !IS_VANILLA) {
+        app.whenReady().then(() => {
+            protocol.handle("vencord", ({ url: unsafeUrl }) => {
+                let url = decodeURI(unsafeUrl).slice("vencord://".length).replace(/\?v=\d+$/, "");
+
+                if (url.endsWith("/")) url = url.slice(0, -1);
+
+                if (url.startsWith("/themes/")) {
+                    const theme = url.slice("/themes/".length);
+
+                    const safeUrl = ensureSafePath(THEMES_DIR, theme);
+                    if (!safeUrl) {
+                        return new Response(null, {
+                            status: 404
+                        });
+                    }
+
+                    return net.fetch(pathToFileURL(safeUrl).toString());
                 }
 
-                return net.fetch(pathToFileURL(safeUrl).toString());
-            }
+                switch (url) {
+                    case "renderer.js.map":
+                    case "vencordDesktopRenderer.js.map":
+                    case "preload.js.map":
+                    case "vencordDesktopPreload.js.map":
+                    case "patcher.js.map":
+                    case "vencordDesktopMain.js.map":
+                        return net.fetch(pathToFileURL(join(__dirname, url)).toString());
+                    default:
+                        return new Response(null, {
+                            status: 404
+                        });
+                }
+            });
 
-            // Source Maps! Maybe there's a better way but since the renderer is executed
-            // from a string I don't think any other form of sourcemaps would work
+            try {
+                if (RendererSettings.store.enableReactDevtools)
+                    installExt("fmkadmapgofadopljbjfkapdkoienihi")
+                        .then(() => console.info("[Vencord] Installed React Developer Tools"))
+                        .catch(err => console.error("[Vencord] Failed to install React Developer Tools", err));
+            } catch { }
 
-            switch (url) {
-                case "renderer.js.map":
-                case "vencordDesktopRenderer.js.map":
-                case "preload.js.map":
-                case "vencordDesktopPreload.js.map":
-                case "patcher.js.map":
-                case "vencordDesktopMain.js.map":
-                    return net.fetch(pathToFileURL(join(__dirname, url)).toString());
-                default:
-                    return new Response(null, {
-                        status: 404
-                    });
-            }
+            initCsp();
         });
+    }
 
-        try {
-            if (RendererSettings.store.enableReactDevtools)
-                installExt("fmkadmapgofadopljbjfkapdkoienihi")
-                    .then(() => console.info("[Vencord] Installed React Developer Tools"))
-                    .catch(err => console.error("[Vencord] Failed to install React Developer Tools", err));
-        } catch { }
-
-
-        initCsp();
-    });
-}
-
-if (IS_DISCORD_DESKTOP) {
-    require("./patcher");
+    if (IS_DISCORD_DESKTOP) {
+        require("./patcher");
+    }
 }

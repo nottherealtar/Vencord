@@ -18,32 +18,12 @@
 
 import { onceDefined } from "@shared/onceDefined";
 import electron, { app, BrowserWindowConstructorOptions, Menu } from "electron";
-import { execFileSync } from "child_process";
 import { dirname, join } from "path";
 
 import { RendererSettings } from "./settings";
-import { markLaunchUpdateRan } from "./updater/launchUpdate";
 import { IS_VANILLA } from "./utils/constants";
 
-console.log("[Vencord] Starting up...");
-
-function maybeUpdateOnLaunch() {
-    if (IS_VANILLA || IS_UPDATER_DISABLED || IS_STANDALONE) return;
-    if (!RendererSettings.store.autoUpdate) return;
-
-    const srcDir = join(__dirname, "..");
-    try {
-        execFileSync(process.execPath, [join(srcDir, "scripts/fork/startupUpdate.mjs")], {
-            cwd: srcDir,
-            stdio: "inherit",
-            env: process.env
-        });
-    } catch (err) {
-        console.error("[Vencord] Startup update failed, continuing with current version:", err);
-    } finally {
-        markLaunchUpdateRan();
-    }
-}
+console.log("[Vencord] Patcher: applying Discord hooks");
 
 // Our injector file at app/index.js
 const injectorPath = require.main!.filename;
@@ -61,10 +41,8 @@ require.main!.filename = join(asarPath, discordPkg.main);
 app.setAppPath(asarPath);
 
 if (!IS_VANILLA) {
-    maybeUpdateOnLaunch();
-
     const settings = RendererSettings.store;
-    // Repatch after host updates on Windows
+
     if (process.platform === "win32") {
         require("./patchWin32Updater");
 
@@ -100,7 +78,6 @@ if (!IS_VANILLA) {
             const original = options.webPreferences.preload;
             options.webPreferences.preload = join(__dirname, "preload.js");
             options.webPreferences.sandbox = false;
-            // work around discord unloading when in background
             options.webPreferences.backgroundThrottling = false;
 
             if (frameless) {
@@ -132,18 +109,13 @@ if (!IS_VANILLA) {
             super(options);
 
             if (disableMinSize) {
-                // Disable the Electron call entirely so that Discord can't dynamically change the size
                 this.setMinimumSize = (_width: number, _height: number) => { };
             }
         }
     }
     Object.assign(BrowserWindow, electron.BrowserWindow);
-    // esbuild may rename our BrowserWindow, which leads to it being excluded
-    // from getFocusedWindow(), so this is necessary
-    // https://github.com/discord/electron/blob/13-x-y/lib/browser/api/browser-window.ts#L60-L62
     Object.defineProperty(BrowserWindow, "name", { value: "BrowserWindow", configurable: true });
 
-    // Replace electrons exports with our custom BrowserWindow
     const electronPath = require.resolve("electron");
     delete require.cache[electronPath]!.exports;
     require.cache[electronPath]!.exports = {
@@ -151,16 +123,12 @@ if (!IS_VANILLA) {
         BrowserWindow
     };
 
-    // Patch appSettings to force enable devtools
     onceDefined(global, "appSettings", s => {
         s.set("DANGEROUS_ENABLE_DEVTOOLS_ONLY_ENABLE_IF_YOU_KNOW_WHAT_YOURE_DOING", true);
     });
 
     process.env.DATA_DIR = join(app.getPath("userData"), "..", "Vencord");
 
-    // Monkey patch commandLine to:
-    // - disable WidgetLayering: Fix DevTools context menus https://github.com/electron/electron/issues/38790
-    // - disable UseEcoQoSForBackgroundProcess: Work around Discord unloading when in background
     const originalAppend = app.commandLine.appendSwitch;
     app.commandLine.appendSwitch = function (...args) {
         if (args[0] === "disable-features") {
@@ -172,11 +140,6 @@ if (!IS_VANILLA) {
         return originalAppend.apply(this, args);
     };
 
-    // disable renderer backgrounding to prevent the app from unloading when in the background
-    // https://github.com/electron/electron/issues/2822
-    // https://github.com/GoogleChrome/chrome-launcher/blob/5a27dd574d47a75fec0fb50f7b774ebf8a9791ba/docs/chrome-flags-for-tools.md#task-throttling
-    // Work around discord unloading when in background
-    // Discord also recently started adding these flags but only on windows for some reason dunno why, it happens on Linux too
     app.commandLine.appendSwitch("disable-renderer-backgrounding");
     app.commandLine.appendSwitch("disable-background-timer-throttling");
     app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");

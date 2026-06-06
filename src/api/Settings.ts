@@ -41,6 +41,7 @@ export interface Settings {
     autoUpdate: boolean;
     autoUpdateNotification: boolean,
     autoInject: boolean;
+    startupUpdateSplash: boolean;
     discordInstallBranch: "auto" | "stable" | "ptb" | "canary";
     discordInstallLocation: string;
     useQuickCss: boolean;
@@ -99,6 +100,7 @@ const DefaultSettings: Settings = {
     autoUpdate: true,
     autoUpdateNotification: true,
     autoInject: true,
+    startupUpdateSplash: true,
     discordInstallBranch: "auto",
     discordInstallLocation: "",
     useQuickCss: true,

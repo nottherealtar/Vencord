@@ -28,6 +28,7 @@
         "inject": "node scripts/runInstaller.mjs -- --install",
         "inject:auto": "node scripts/fork/autoInject.mjs",
         "test:update": "node scripts/fork/testUpdatePipeline.mjs",
+        "verify:launch": "node scripts/fork/preLaunchVerify.mjs",
         "fork:sync": "node scripts/fork/syncUpstream.mjs",
         "uninject": "node scripts/runInstaller.mjs -- --uninstall",
         "lint": "eslint",

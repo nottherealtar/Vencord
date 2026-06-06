@@ -19,13 +19,19 @@
 import { IpcEvents } from "@shared/IpcEvents";
 import { execFile as cpExecFile } from "child_process";
 import { ipcMain } from "electron";
-import { join } from "path";
 import { promisify } from "util";
 
-import { didRunLaunchUpdate } from "./launchUpdate";
 import { serializeErrors } from "./common";
+import {
+    acquireUpdateLock,
+    finishUpdate,
+    getUpdateSession,
+    releaseUpdateLock,
+    tryBeginUpdate
+} from "./sessionState";
+import { REPO_ROOT } from "../utils/repoRoot";
 
-const VENCORD_SRC_DIR = join(__dirname, "..");
+const VENCORD_SRC_DIR = REPO_ROOT;
 
 const execFile = promisify(cpExecFile);
 
@@ -86,11 +92,46 @@ async function build() {
     return !res.stderr.includes("Build failed");
 }
 
+async function guardedPull(manual: boolean) {
+    if (!acquireUpdateLock()) {
+        throw new Error("Another update is already in progress");
+    }
+    if (!tryBeginUpdate(manual)) {
+        releaseUpdateLock();
+        throw new Error("Update already completed or in progress this session");
+    }
+
+    try {
+        return await pull();
+    } catch (err) {
+        finishUpdate(false);
+        releaseUpdateLock();
+        throw err;
+    }
+}
+
+async function guardedBuild() {
+    try {
+        const ok = await build();
+        finishUpdate(ok);
+        return ok;
+    } catch (err) {
+        finishUpdate(false);
+        throw err;
+    } finally {
+        releaseUpdateLock();
+    }
+}
+
 ipcMain.on(IpcEvents.GET_LAUNCH_UPDATE_RAN, e => {
-    e.returnValue = didRunLaunchUpdate();
+    e.returnValue = getUpdateSession().launchUpdateRan;
+});
+
+ipcMain.on(IpcEvents.GET_UPDATE_SESSION, e => {
+    e.returnValue = getUpdateSession();
 });
 
 ipcMain.handle(IpcEvents.GET_REPO, serializeErrors(getRepo));
 ipcMain.handle(IpcEvents.GET_UPDATES, serializeErrors(calculateGitChanges));
-ipcMain.handle(IpcEvents.UPDATE, serializeErrors(pull));
-ipcMain.handle(IpcEvents.BUILD, serializeErrors(build));
+ipcMain.handle(IpcEvents.UPDATE, serializeErrors((_, manual?: boolean) => guardedPull(!!manual)));
+ipcMain.handle(IpcEvents.BUILD, serializeErrors(guardedBuild));

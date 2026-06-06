@@ -8,6 +8,8 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
 import { readUpdaterSettings } from "./readUpdaterSettings.mjs";
+import { forkScriptEnv } from "./subprocessEnv.mjs";
+import { isDiscordRunning } from "./launchSafety.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -68,6 +70,11 @@ export function runAutoInject() {
         return false;
     }
 
+    if (isDiscordRunning()) {
+        console.error("[Vencord] Auto-inject refused — Discord is running (would cause file-lock loops)");
+        return false;
+    }
+
     if (isDevInstallCurrent(settings)) {
         console.log("[Vencord] Dev install already points at this repo — rebuild is sufficient, skipping re-inject");
         return true;
@@ -84,11 +91,10 @@ export function runAutoInject() {
     execFileSync(process.execPath, args, {
         cwd: ROOT,
         stdio: "inherit",
-        env: {
-            ...process.env,
+        env: forkScriptEnv({
             VENCORD_USER_DATA_DIR: process.env.VENCORD_USER_DATA_DIR ?? ROOT,
             VENCORD_DEV_INSTALL: "1",
-        },
+        }),
     });
     console.log("[Vencord] Inject complete");
     return true;

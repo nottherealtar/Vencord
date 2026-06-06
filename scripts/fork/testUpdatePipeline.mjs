@@ -4,15 +4,19 @@
  */
 
 import { execFileSync, execSync } from "child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 
 import { runAutoInject, isDevInstallCurrent } from "./autoInject.mjs";
+import { ARTIFACTS } from "./launchConstants.mjs";
+import { consumeRelaunchGuard, writeRelaunchGuard } from "./relaunchGuard.mjs";
 import { readUpdaterSettings } from "./readUpdaterSettings.mjs";
+import { forkScriptEnv } from "./subprocessEnv.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const SETTINGS_PATH = join(ROOT, "settings", "settings.json");
+const testEnv = () => forkScriptEnv({ VENCORD_USER_DATA_DIR: ROOT });
 
 const results = [];
 
@@ -135,6 +139,35 @@ test("git fetch origin succeeds", () => {
     git(["fetch", "origin"]);
 });
 
+test("relaunch guard write + consume round-trip", () => {
+    writeRelaunchGuard(ROOT);
+    assert(consumeRelaunchGuard(ROOT) === true, "expected fresh guard to be consumed");
+    assert(consumeRelaunchGuard(ROOT) === false, "guard should only work once");
+});
+
+test("stale relaunch guard is ignored", () => {
+    const guardPath = join(ROOT, "settings", ".vencord-relaunch-guard");
+    writeFileSync(guardPath, String(Date.now() - 300_000));
+    assert(consumeRelaunchGuard(ROOT) === false, "stale guard should not trigger post-update boot");
+});
+
+test("forkScriptEnv runs scripts as Node, not a new Discord window", () => {
+    const env = forkScriptEnv({ VENCORD_TEST: "1" });
+    assert(env.ELECTRON_RUN_AS_NODE === "1", "must set ELECTRON_RUN_AS_NODE");
+    assert(env.VENCORD_TEST === "1", "must preserve extra env vars");
+});
+
+test("relaunch guard pending blocks startup update subprocess", () => {
+    writeRelaunchGuard(ROOT);
+    const out = execFileSync(process.execPath, [join(ROOT, "scripts/fork/startupUpdate.mjs")], {
+        cwd: ROOT,
+        encoding: "utf8",
+        env: testEnv(),
+    });
+    assert(out.includes("relaunch guard pending"), `expected skip, got: ${out}`);
+    consumeRelaunchGuard(ROOT);
+});
+
 // --- Test A: startup no-op (already up to date) ---
 console.log("\nTest A — Startup update (already up to date):");
 
@@ -142,7 +175,7 @@ test("startupUpdate exits 0 when nothing to pull", () => {
     const out = execFileSync(process.execPath, [join(ROOT, "scripts/fork/startupUpdate.mjs")], {
         cwd: ROOT,
         encoding: "utf8",
-        env: { ...process.env, VENCORD_USER_DATA_DIR: ROOT },
+        env: testEnv(),
     });
     assert(out.includes("Already on latest version"), `unexpected output: ${out}`);
 });
@@ -182,7 +215,7 @@ test("autoInject skips when autoInject=false", () => {
     const out = execFileSync(process.execPath, [join(ROOT, "scripts/fork/autoInject.mjs")], {
         cwd: ROOT,
         encoding: "utf8",
-        env: { ...process.env, VENCORD_USER_DATA_DIR: ROOT },
+        env: testEnv(),
     });
     assert(out.includes("Auto-inject skipped"), `expected skip message, got: ${out}`);
     restoreSettings(settingsBackup);
@@ -191,7 +224,7 @@ test("autoInject skips when autoInject=false", () => {
 // --- Test D: full startup update simulation (one commit behind) ---
 console.log("\nTest D — Full startup update (simulate being behind origin):");
 
-test("startupUpdate pulls, rebuilds, and injects when 1 commit behind", () => {
+test("startupUpdate pulls and rebuilds when 1 commit behind", () => {
     const headBefore = git(["rev-parse", "HEAD"]);
     const behindCheck = git(["rev-list", "--count", `HEAD..origin/main`]);
     assert(behindCheck === "0", "Must start in sync with origin for simulation setup");
@@ -214,7 +247,7 @@ test("startupUpdate pulls, rebuilds, and injects when 1 commit behind", () => {
         execFileSync(process.execPath, [join(ROOT, "scripts/fork/startupUpdate.mjs")], {
             cwd: ROOT,
             stdio: "inherit",
-            env: { ...process.env, VENCORD_USER_DATA_DIR: ROOT },
+            env: testEnv(),
         });
 
         const headAfter = git(["rev-parse", "HEAD"]);
@@ -222,9 +255,15 @@ test("startupUpdate pulls, rebuilds, and injects when 1 commit behind", () => {
         assert(existsSync(join(ROOT, "dist/patcher.js")), "Build output missing after update");
         assert(existsSync(join(ROOT, "dist/renderer.js")), "Renderer output missing after update");
     } finally {
+        try {
+            if (git(["rev-parse", "HEAD"]) !== headBefore) {
+                git(["reset", "--hard", headBefore]);
+            }
+        } catch { /* best effort */ }
         if (stashed) {
             try { git(["stash", "pop"]); } catch { /* may conflict */ }
         }
+        try { unlinkSync(join(ROOT, "settings", ARTIFACTS.sessionUpdated)); } catch { /* test cleanup */ }
     }
 });
 

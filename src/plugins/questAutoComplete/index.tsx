@@ -95,6 +95,25 @@ async function sleep(ms: number): Promise<void> {
 }
 const PERSIST_KEY = "QuestAutoComplete_v1";
 
+/** Spacing bulk game-loop starts so presence + heartbeats are not all simultaneous (reduces Discord 500s). */
+const GAME_START_STAGGER_MS = 3500;
+/** Brief pause after setting local presence before heartbeat POST (Discord validates activity vs quest). */
+const HEARTBEAT_PRESENCE_SETTLE_MS = 120;
+
+function scheduleStaggeredGameStarts(quests: readonly any[], logResumeForIds?: ReadonlySet<string>) {
+    const list = quests.filter(q => q && !runners.has(q.id));
+    if (!list.length) return 0;
+    list.forEach((quest, i) => {
+        setTimeout(() => {
+            if (runners.has(quest.id)) return;
+            if (!startGameQuest(quest)) return;
+            if (logResumeForIds?.has(quest.id))
+                appendLog(quest.id, { text: "Resumed after restart.", type: "info" });
+        }, i * GAME_START_STAGGER_MS);
+    });
+    return list.length;
+}
+
 const GAME_TASK_KEYS = ["PLAY_ON_DESKTOP", "PLAY_ON_MOBILE", "STREAM_ON_DESKTOP"] as const;
 type GameTaskKey = typeof GAME_TASK_KEYS[number];
 
@@ -437,6 +456,11 @@ function startGameQuest(quest: any): boolean {
     const sendHeartbeat = async () => {
         const runner = runners.get(questId);
         if (!runner) return;
+        // Play/stream quests: API expects your Rich Presence to match this quest's app when heartbeating.
+        if (!presenceOverride) {
+            dispatchPresence(appId, appName);
+            await sleep(HEARTBEAT_PRESENCE_SETTLE_MS);
+        }
         try {
             const res = await fetch(`${API}/quests/${questId}/heartbeat`, {
                 method: "POST", credentials: "include",
@@ -455,10 +479,15 @@ function startGameQuest(quest: any): boolean {
                 const wait = parseRetryAfterMs(res);
                 appendLog(questId, { text: `Rate limited — retrying on next beat (~${Math.round(wait / 1000)}s)`, type: "info" });
             } else {
-                runner.failed = true;
                 const err = await res.json().catch(() => ({})) as any;
                 appendLog(questId, { text: `Heartbeat failed ${res.status}: ${err.message ?? res.statusText}`, type: "error" });
-                if (res.status === 400 || res.status === 404) stopGameQuest(questId);
+                if (res.status === 400 || res.status === 404) {
+                    runner.failed = true;
+                    stopGameQuest(questId);
+                } else if (res.status < 500) {
+                    runner.failed = true;
+                }
+                // 5xx: often transient or load — keep looping; next beat retries with fresh presence.
             }
         } catch (e: any) {
             appendLog(questId, { text: `Network error: ${e?.message}`, type: "error" });
@@ -1071,9 +1100,11 @@ function QuestPanel() {
                             showToast("No enrolled game quests to start.", Toasts.Type.MESSAGE);
                             return;
                         }
-                        let n = 0;
-                        for (const q of list) if (startGameQuest(q)) n++;
-                        showToast(n ? `Started ${n} game quest(s)` : "Could not start (check each quest)", n ? Toasts.Type.SUCCESS : Toasts.Type.MESSAGE);
+                        const n = scheduleStaggeredGameStarts(list);
+                        showToast(
+                            `Starting ${n} quest(s) ${GAME_START_STAGGER_MS / 1000}s apart (Discord matches presence to each heartbeat).`,
+                            Toasts.Type.MESSAGE,
+                        );
                     }}
                 >
                     Start all games
@@ -1107,7 +1138,7 @@ export default definePlugin({
     name:        "QuestAutoComplete",
     description: "Browse and finish Discord quests: watch-video progress, play/stream heartbeats, presence override, enroll shortcuts, and bulk actions",
     authors:     [Devs.Tar],
-    tags:        ["Quests", "Utility"],
+    tags:        ["Activity", "Utility"],
     enabledByDefault: true,
 
     settings,
@@ -1130,21 +1161,18 @@ export default definePlugin({
         // Delay to let QuestsStore hydrate after Discord startup.
         setTimeout(() => {
             const persistedIds = loadActiveQuestIds();
+            const resumeSet    = new Set(persistedIds);
             const gameQuests   = getGameQuests();
 
-            for (const questId of persistedIds) {
-                const quest = gameQuests.find(q => q.id === questId);
-                if (quest && !runners.has(questId)) {
-                    startGameQuest(quest);
-                    appendLog(questId, { text: "Resumed after restart.", type: "info" });
-                }
-            }
+            const resumeList = persistedIds
+                .map(id => gameQuests.find(q => q.id === id))
+                .filter((q): q is NonNullable<typeof q> => !!q && !runners.has(q.id));
 
-            if (settings.store.autoStart) {
-                for (const quest of gameQuests) {
-                    if (!runners.has(quest.id)) startGameQuest(quest);
-                }
-            }
+            const autoList = settings.store.autoStart
+                ? gameQuests.filter(q => !runners.has(q.id) && !resumeSet.has(q.id))
+                : [];
+
+            scheduleStaggeredGameStarts([...resumeList, ...autoList], resumeSet);
         }, 3_000);
     },
 
@@ -1169,10 +1197,10 @@ export default definePlugin({
             name:        "startgamequests",
             description: "Start heartbeat loops for all enrolled game-play quests",
             execute: async () => {
-                const quests = getGameQuests();
-                if (!quests.length) return { content: "No active game quests found." };
-                const started = quests.filter(q => startGameQuest(q)).length;
-                return { content: `▶ Started ${started} game quest(s). Open plugin settings to monitor.` };
+                const quests = getGameQuests().filter(q => !runners.has(q.id));
+                if (!quests.length) return { content: "No game quests to start (already running or none enrolled)." };
+                const n = scheduleStaggeredGameStarts(quests);
+                return { content: `Starting ${n} game quest(s), ${GAME_START_STAGGER_MS / 1000}s apart. Open the quest panel to monitor.` };
             },
         },
         {

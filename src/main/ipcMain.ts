@@ -33,6 +33,7 @@ import { registerCspIpcHandlers } from "./csp/manager";
 import { getThemeInfo, stripBOM, UserThemeHeader } from "./themes";
 import { ALLOWED_PROTOCOLS, QUICK_CSS_PATH, SETTINGS_DIR, THEMES_DIR } from "./utils/constants";
 import { makeLinksOpenExternally } from "./utils/externalLinks";
+import { ensureSafePath } from "./utils/safePath";
 
 const RENDERER_CSS_PATH = join(__dirname, IS_VESKTOP ? "vencordDesktopRenderer.css" : "renderer.css");
 
@@ -40,12 +41,7 @@ mkdirSync(THEMES_DIR, { recursive: true });
 
 registerCspIpcHandlers();
 
-export function ensureSafePath(basePath: string, path: string) {
-    const normalizedBasePath = normalize(basePath + "/");
-    const newPath = join(basePath, path);
-    const normalizedPath = normalize(newPath);
-    return normalizedPath.startsWith(normalizedBasePath) ? normalizedPath : null;
-}
+export { ensureSafePath } from "./utils/safePath";
 
 function readCss() {
     return readFile(QUICK_CSS_PATH, "utf-8").catch(() => "");

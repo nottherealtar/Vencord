@@ -51,10 +51,10 @@ export async function checkForUpdates() {
     return (isOutdated = changes.length > 0);
 }
 
-export async function update() {
-    if (!isOutdated) return true;
+export async function update(manual = false) {
+    if (!isOutdated && !await checkForUpdates()) return true;
 
-    await Unwrap(VencordNative.updater.update());
+    await Unwrap(VencordNative.updater.update(manual));
     isOutdated = false;
 
     if (!await Unwrap(VencordNative.updater.rebuild()))
@@ -75,8 +75,12 @@ export async function maybePromptToUpdate(confirmMessage: string, checkForDev = 
             const wantsUpdate = confirm(confirmMessage);
             if (wantsUpdate && isNewer) return alert("Your local copy has more recent commits. Please stash or reset them.");
             if (wantsUpdate) {
-                await update();
-                relaunch();
+                await update(true);
+                if (IS_DISCORD_DESKTOP) {
+                    alert("Update complete. Fully close Discord (system tray too) and reopen to apply.");
+                } else {
+                    relaunch();
+                }
             }
         }
     } catch (err) {

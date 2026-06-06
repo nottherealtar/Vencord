@@ -16,6 +16,7 @@ const SETTINGS_CANDIDATES = [
 const DEFAULTS = {
     autoUpdate: true,
     autoInject: true,
+    startupUpdateSplash: true,
     discordInstallBranch: "auto",
     discordInstallLocation: "",
 };

@@ -47,10 +47,23 @@ export default {
 
     updater: {
         getUpdates: () => invoke<IpcRes<Record<"hash" | "author" | "message", string>[]>>(IpcEvents.GET_UPDATES),
-        update: () => invoke<IpcRes<boolean>>(IpcEvents.UPDATE),
+        update: (manual = false) => invoke<IpcRes<boolean>>(IpcEvents.UPDATE, manual),
         rebuild: () => invoke<IpcRes<boolean>>(IpcEvents.BUILD),
         getRepo: () => invoke<IpcRes<string>>(IpcEvents.GET_REPO),
         didRunOnLaunch: () => sendSync<boolean>(IpcEvents.GET_LAUNCH_UPDATE_RAN),
+        getSession: () => sendSync<{
+            launchUpdateRan: boolean;
+            updatedThisSession: boolean;
+            updateInProgress: boolean;
+        }>(IpcEvents.GET_UPDATE_SESSION),
+        canAutoApply: () => {
+            const s = sendSync<{
+                launchUpdateRan: boolean;
+                updatedThisSession: boolean;
+                updateInProgress: boolean;
+            }>(IpcEvents.GET_UPDATE_SESSION);
+            return !s.launchUpdateRan && !s.updatedThisSession && !s.updateInProgress;
+        },
     },
 
     settings: {
