@@ -54,15 +54,13 @@ export async function checkForUpdates() {
 export async function update() {
     if (!isOutdated) return true;
 
-    const res = await Unwrap(VencordNative.updater.update());
+    await Unwrap(VencordNative.updater.update());
+    isOutdated = false;
 
-    if (res) {
-        isOutdated = false;
-        if (!await Unwrap(VencordNative.updater.rebuild()))
-            throw new Error("The Build failed. Please try manually building the new update");
-    }
+    if (!await Unwrap(VencordNative.updater.rebuild()))
+        throw new Error("The Build failed. Please try manually building the new update");
 
-    return res;
+    return true;
 }
 
 export const getRepo = () => Unwrap(VencordNative.updater.getRepo());

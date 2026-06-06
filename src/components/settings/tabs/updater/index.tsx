@@ -95,7 +95,7 @@ function Updater() {
             />
             <FormSwitch
                 title="Automatically inject after update"
-                description="Re-patch Discord with the latest build after each update (uses --branch auto by default, or your custom install path below)"
+                description="Only needed for non-dev installs. Dev installs load directly from your repo and skip re-inject automatically."
                 value={settings.autoInject}
                 onChange={(v: boolean) => settings.autoInject = v}
                 disabled={!settings.autoUpdate}

@@ -40,6 +40,7 @@ export const enum IpcEvents {
     GET_REPO = "VencordGetRepo",
     UPDATE = "VencordUpdate",
     BUILD = "VencordBuild",
+    GET_LAUNCH_UPDATE_RAN = "VencordGetLaunchUpdateRan",
 
     OPEN_MONACO_EDITOR = "VencordOpenMonacoEditor",
     GET_MONACO_THEME = "VencordGetMonacoTheme",

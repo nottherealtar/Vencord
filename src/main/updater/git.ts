@@ -22,8 +22,8 @@ import { ipcMain } from "electron";
 import { join } from "path";
 import { promisify } from "util";
 
+import { didRunLaunchUpdate } from "./launchUpdate";
 import { serializeErrors } from "./common";
-import { RendererSettings } from "../settings";
 
 const VENCORD_SRC_DIR = join(__dirname, "..");
 
@@ -55,7 +55,7 @@ async function calculateGitChanges() {
     const existsOnOrigin = (await git("ls-remote", "origin", branch)).stdout.length > 0;
     if (!existsOnOrigin) return [];
 
-    const res = await git("log", `HEAD...origin/${branch}`, "--pretty=format:%an/%h/%s");
+    const res = await git("log", `HEAD..origin/${branch}`, "--pretty=format:%an/%h/%s");
 
     const commits = res.stdout.trim();
     return commits ? commits.split("\n").map(line => {
@@ -68,28 +68,8 @@ async function calculateGitChanges() {
 }
 
 async function pull() {
-    const res = await git("pull");
-    return res.stdout.includes("Fast-forward");
-}
-
-async function injectDiscord() {
-    if (RendererSettings.store.autoInject === false) return true;
-
-    const opts = {
-        cwd: VENCORD_SRC_DIR,
-        env: {
-            ...process.env,
-            VENCORD_USER_DATA_DIR: VENCORD_SRC_DIR,
-            VENCORD_DEV_INSTALL: "1",
-        },
-    };
-
-    const command = isFlatpak ? "flatpak-spawn" : "node";
-    const args = isFlatpak
-        ? ["--host", "node", "scripts/fork/autoInject.mjs"]
-        : ["scripts/fork/autoInject.mjs"];
-
-    await execFile(command, args, opts);
+    const branch = (await git("branch", "--show-current")).stdout.trim();
+    await git("pull", "--rebase", "--autostash", "origin", branch);
     return true;
 }
 
@@ -103,17 +83,12 @@ async function build() {
 
     const res = await execFile(command, args, opts);
 
-    if (res.stderr.includes("Build failed")) return false;
-
-    try {
-        await injectDiscord();
-    } catch (e) {
-        console.error("[Vencord] Auto-inject failed after update:", e);
-        return false;
-    }
-
-    return true;
+    return !res.stderr.includes("Build failed");
 }
+
+ipcMain.on(IpcEvents.GET_LAUNCH_UPDATE_RAN, e => {
+    e.returnValue = didRunLaunchUpdate();
+});
 
 ipcMain.handle(IpcEvents.GET_REPO, serializeErrors(getRepo));
 ipcMain.handle(IpcEvents.GET_UPDATES, serializeErrors(calculateGitChanges));

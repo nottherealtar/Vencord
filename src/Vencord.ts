@@ -102,9 +102,16 @@ async function syncSettings() {
 }
 
 let notifiedForUpdatesThisSession = false;
+let updatedThisSession = false;
 
 async function runUpdateCheck() {
     if (IS_UPDATER_DISABLED) return;
+
+    // Startup update already pulled + rebuilt before Discord opened
+    if (VencordNative.updater.didRunOnLaunch()) return;
+
+    // Never run twice in one session — avoids pull/rebuild loops
+    if (updatedThisSession) return;
 
     const notify = (data: NotificationData) => {
         if (notifiedForUpdatesThisSession) return;
@@ -123,10 +130,11 @@ async function runUpdateCheck() {
 
         if (Settings.autoUpdate) {
             await update();
+            updatedThisSession = true;
             if (Settings.autoUpdateNotification) {
                 notify({
                     title: "Vencord has been updated!",
-                    body: "Click here to restart",
+                    body: "Restart Discord to apply changes",
                     onClick: relaunch
                 });
             }

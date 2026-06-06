@@ -22,6 +22,7 @@ import { execFileSync } from "child_process";
 import { dirname, join } from "path";
 
 import { RendererSettings } from "./settings";
+import { markLaunchUpdateRan } from "./updater/launchUpdate";
 import { IS_VANILLA } from "./utils/constants";
 
 console.log("[Vencord] Starting up...");
@@ -39,6 +40,8 @@ function maybeUpdateOnLaunch() {
         });
     } catch (err) {
         console.error("[Vencord] Startup update failed, continuing with current version:", err);
+    } finally {
+        markLaunchUpdateRan();
     }
 }
 

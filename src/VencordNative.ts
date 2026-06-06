@@ -50,6 +50,7 @@ export default {
         update: () => invoke<IpcRes<boolean>>(IpcEvents.UPDATE),
         rebuild: () => invoke<IpcRes<boolean>>(IpcEvents.BUILD),
         getRepo: () => invoke<IpcRes<string>>(IpcEvents.GET_REPO),
+        didRunOnLaunch: () => sendSync<boolean>(IpcEvents.GET_LAUNCH_UPDATE_RAN),
     },
 
     settings: {
