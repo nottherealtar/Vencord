@@ -8,6 +8,7 @@ on:
 
 permissions:
     contents: write
+    issues: write
 
 jobs:
     sync:
@@ -20,21 +21,14 @@ jobs:
                   fetch-depth: 0
                   token: ${{ secrets.GITHUB_TOKEN }}
 
-            - name: Sync from upstream
+            - name: Configure git
               run: |
                   git config user.name "github-actions[bot]"
                   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-                  git remote add upstream https://github.com/Vendicated/Vencord.git
-                  git fetch upstream main
-
-                  if git merge-base --is-ancestor HEAD upstream/main; then
-                      echo "Already up to date with upstream"
-                      exit 0
-                  fi
-
-                  git merge upstream/main --no-edit -m "Sync upstream Vencord ($(date -u +%Y-%m-%d))"
-                  git push origin main
+            - name: Rebase onto upstream with conflict resolution
+              id: sync
+              run: node scripts/fork/syncUpstream.mjs --push
 
             - uses: pnpm/action-setup@v3
 
@@ -45,6 +39,30 @@ jobs:
                   cache: "pnpm"
 
             - name: Verify build after sync
+              if: steps.sync.outcome == 'success'
               run: |
                   pnpm install --frozen-lockfile
                   pnpm build
+
+            - name: Open issue on sync failure
+              if: failure() && steps.sync.outcome == 'failure'
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: |
+                  RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+                  gh issue create \
+                      --title "Upstream sync failed ($(date -u +%Y-%m-%d))" \
+                      --body "$(cat <<EOF
+                  The scheduled upstream sync could not complete automatically.
+
+                  **Workflow run:** ${RUN_URL}
+
+                  ### What to do
+                  1. \`git fetch upstream && node scripts/fork/syncUpstream.mjs\`
+                  2. Resolve any remaining conflicts manually
+                  3. \`git push origin main\`
+
+                  Fork-owned paths are listed in \`.github/fork-paths.txt\`.
+                  EOF
+                  )" \
+                      --label "upstream-sync" || true

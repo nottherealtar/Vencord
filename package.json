@@ -26,6 +26,7 @@
         "generatePluginJson": "tsx scripts/generatePluginList.ts",
         "generateTypes": "tspc --emitDeclarationOnly --declaration --outDir packages/vencord-types --allowJs false",
         "inject": "node scripts/runInstaller.mjs -- --install",
+        "fork:sync": "node scripts/fork/syncUpstream.mjs",
         "uninject": "node scripts/runInstaller.mjs -- --uninstall",
         "lint": "eslint",
         "lint-styles": "stylelint \"src/**/*.css\" --ignore-pattern src/userplugins",

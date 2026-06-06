@@ -1,0 +1,6 @@
+# Paths owned by this fork — kept on our version when rebasing onto upstream.
+# One path per line. Lines starting with # are ignored.
+src/plugins/questAutoComplete/
+themes/Coffeehouse.theme.css
+.github/workflows/fork-sync.yml
+scripts/fork/
