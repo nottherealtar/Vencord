@@ -6,11 +6,9 @@ import { IpcMainInvokeEvent } from "electron";
 
 const API_BASE = "https://api-public.cs-prod.leetify.com";
 
-export async function fetchProfile(
-    _: IpcMainInvokeEvent,
-    id: string,
-    apiKey?: string,
-): Promise<{ ok: true; data: unknown; } | { ok: false; error: string; }> {
+type LeetifyResult = { ok: true; data: unknown; } | { ok: false; error: string; };
+
+async function leetifyGet(_: IpcMainInvokeEvent, path: string, apiKey?: string): Promise<LeetifyResult> {
     try {
         const headers: Record<string, string> = { Accept: "application/json" };
         const key = apiKey?.trim();
@@ -19,7 +17,7 @@ export async function fetchProfile(
             headers._leetify_key = key;
         }
 
-        const res = await fetch(`${API_BASE}/v3/profile?id=${encodeURIComponent(id)}`, { headers });
+        const res = await fetch(`${API_BASE}${path}`, { headers });
         const text = await res.text();
 
         let json: Record<string, unknown>;
@@ -37,4 +35,20 @@ export async function fetchProfile(
     } catch (e) {
         return { ok: false, error: e instanceof Error ? e.message : String(e) };
     }
+}
+
+export async function fetchProfile(
+    event: IpcMainInvokeEvent,
+    id: string,
+    apiKey?: string,
+): Promise<LeetifyResult> {
+    return leetifyGet(event, `/v3/profile?id=${encodeURIComponent(id)}`, apiKey);
+}
+
+export async function fetchMatch(
+    event: IpcMainInvokeEvent,
+    gameId: string,
+    apiKey?: string,
+): Promise<LeetifyResult> {
+    return leetifyGet(event, `/v2/matches/${encodeURIComponent(gameId)}`, apiKey);
 }

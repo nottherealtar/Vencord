@@ -6,10 +6,12 @@ import { React, useEffect, useState } from "@webpack/common";
 
 import {
     fetchLeetifyProfile,
+    formatLastMatchLine,
     formatPremier,
     formatRating,
     formatWinrate,
     friendlyError,
+    getLastMatch,
     LeetifyParseResult,
     LeetifyProfile,
 } from "./leetify";
@@ -17,9 +19,10 @@ import {
 interface Props {
     link: LeetifyParseResult;
     apiKey?: string;
+    showLastMatch?: boolean;
 }
 
-export function LeetifyTrackerCard({ link, apiKey }: Props) {
+export function LeetifyTrackerCard({ link, apiKey, showLastMatch }: Props) {
     const [profile, setProfile] = useState<LeetifyProfile | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
@@ -45,6 +48,7 @@ export function LeetifyTrackerCard({ link, apiKey }: Props) {
     }, [link.id, apiKey]);
 
     const premier = profile ? formatPremier(profile.ranks.premier) : null;
+    const lastMatch = profile && showLastMatch ? getLastMatch(profile) : null;
     const openUrl = profile?.profileUrl ?? link.profileUrl;
 
     return (
@@ -83,6 +87,11 @@ export function LeetifyTrackerCard({ link, apiKey }: Props) {
                             <> · Faceit L{profile.ranks.faceit}</>
                         )}
                     </div>
+                    {lastMatch && (
+                        <div className="vc-tracker-card-row-last">
+                            {formatLastMatchLine(lastMatch)}
+                        </div>
+                    )}
                 </>
             )}
 

@@ -47,12 +47,17 @@ const settings = definePluginSettings({
     },
     verboseVideoToasts: {
         type:        OptionType.BOOLEAN,
-        description: "Toast every video API error while progressing (off = only final errors and summaries)",
+        description: "Toast every video API error while progressing (ignored when Quiet mode is on)",
+        default:     false,
+    },
+    quietMode: {
+        type:        OptionType.BOOLEAN,
+        description: "Hide progress and action toasts — errors and completion toasts (below) still show",
         default:     false,
     },
     toastOnComplete: {
         type:        OptionType.BOOLEAN,
-        description: "Show a toast when a quest finishes",
+        description: "Show a toast when a quest finishes (still shown in Quiet mode)",
         default:     true,
     },
     desktopNotifyOnComplete: {
@@ -68,6 +73,26 @@ const settings = definePluginSettings({
         stickToMarkers: true,
     },
 });
+
+function questToast(message: string, kind: "info" | "success" | "error" = "info") {
+    if (kind !== "error" && settings.store.quietMode) return;
+
+    showToast(
+        message,
+        kind === "error" ? Toasts.Type.FAILURE :
+            kind === "success" ? Toasts.Type.SUCCESS :
+                Toasts.Type.MESSAGE,
+    );
+}
+
+function videoErrorToast(name: string, reason: "unavailable" | "exhausted" | "no_response" | "http", status?: number) {
+    switch (reason) {
+        case "unavailable": return `${name}: video progress unavailable`;
+        case "exhausted": return `${name}: stopped — too many errors`;
+        case "no_response": return `${name}: Discord didn't accept progress`;
+        case "http": return `${name}: request failed (${status ?? "?"})`;
+    }
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -321,12 +346,10 @@ async function enrollInQuest(questId: string): Promise<boolean> {
 // ─── Video completion ─────────────────────────────────────────────────────────
 
 async function completeOneVideoQuest(quest: any, onLog?: (e: LogEntry) => void): Promise<void> {
-    const log = (text: string, type: LogEntry["type"] = "info", toastError = false) => {
+    const log = (text: string, type: LogEntry["type"] = "info", toastError = false, toastText?: string) => {
         onLog?.({ text, type });
-        if (type === "success" && settings.store.toastOnComplete)
-            showToast(text, Toasts.Type.SUCCESS);
-        if (type === "error" && (toastError || settings.store.verboseVideoToasts))
-            showToast(text, Toasts.Type.FAILURE);
+        if (type === "error" && (toastError || (settings.store.verboseVideoToasts && !settings.store.quietMode)))
+            questToast(toastText ?? text, "error");
     };
 
     const questId = quest.id;
@@ -354,7 +377,7 @@ async function completeOneVideoQuest(quest: any, onLog?: (e: LogEntry) => void):
                     consecutiveFailures = 0;
                     hadSuccessfulRequest = true;
                 } else if (res.status === 404) {
-                    log(`${name}: endpoint not found.`, "error", true);
+                    log(`${name}: endpoint not found.`, "error", true, videoErrorToast(name, "unavailable"));
                     failed = true;
                     break;
                 } else if (res.status === 429) {
@@ -365,15 +388,25 @@ async function completeOneVideoQuest(quest: any, onLog?: (e: LogEntry) => void):
                 } else {
                     consecutiveFailures++;
                     const err = await res.json().catch(() => ({})) as any;
-                    log(`${name} @ ${ts}s — ${res.status}: ${err.message ?? res.statusText}`, "error");
+                    log(
+                        `${name} @ ${ts}s — ${res.status}: ${err.message ?? res.statusText}`,
+                        "error",
+                        false,
+                        videoErrorToast(name, "http", res.status),
+                    );
                 }
             } catch (e: any) {
                 consecutiveFailures++;
-                log(`${name} — network error: ${e?.message}`, "error");
+                log(`${name} — network error: ${e?.message}`, "error", false, `${name}: network error`);
             }
 
             if (consecutiveFailures >= VIDEO_MAX_CONSECUTIVE_FAILURES) {
-                log(`${name}: stopped after ${VIDEO_MAX_CONSECUTIVE_FAILURES} failed requests in a row.`, "error", true);
+                log(
+                    `${name}: stopped after ${VIDEO_MAX_CONSECUTIVE_FAILURES} failed requests in a row.`,
+                    "error",
+                    true,
+                    videoErrorToast(name, "exhausted"),
+                );
                 break;
             }
 
@@ -389,7 +422,12 @@ async function completeOneVideoQuest(quest: any, onLog?: (e: LogEntry) => void):
         onLog?.({ text: `${name} — done!`, type: "success" });
         fireCompletionNotification(name, getQuestImage(quest));
     } else if (!failed && !hadSuccessfulRequest) {
-        log(`${name}: no successful API responses.`, "error", true);
+        log(
+            `${name}: no successful API responses.`,
+            "error",
+            true,
+            videoErrorToast(name, "no_response"),
+        );
     }
 }
 
@@ -397,10 +435,10 @@ async function completeVideoQuests(onLog?: (e: LogEntry) => void): Promise<void>
     const quests = getVideoQuests();
     if (!quests.length) {
         onLog?.({ text: "No active video quests found.", type: "error" });
-        showToast("No enrolled video quests to complete.", Toasts.Type.MESSAGE);
+        questToast("No enrolled video quests", "error");
         return;
     }
-    showToast(`Running video progress for ${quests.length} quest(s)…`, Toasts.Type.MESSAGE);
+    questToast(`Running video for ${quests.length} quest(s)…`, "info");
     for (const quest of quests) await completeOneVideoQuest(quest, onLog);
 }
 
@@ -483,6 +521,7 @@ function startGameQuest(quest: any): boolean {
                 appendLog(questId, { text: `Heartbeat failed ${res.status}: ${err.message ?? res.statusText}`, type: "error" });
                 if (res.status === 400 || res.status === 404) {
                     runner.failed = true;
+                    questToast(`${name}: heartbeat stopped (${res.status})`, "error");
                     stopGameQuest(questId);
                 } else if (res.status < 500) {
                     runner.failed = true;
@@ -744,7 +783,7 @@ function UnifiedQuestList() {
         setEnrollingId(quest.id);
         const ok = await enrollInQuest(quest.id);
         if (ok) {
-            showToast(`Enrolled in ${questName(quest)}!`, Toasts.Type.SUCCESS);
+            questToast(`Enrolled in ${questName(quest)}`, "success");
             setTimeout(() => {
                 try { QuestsFetcher.fetchQuests?.(); } catch { /* non-fatal */ }
                 const videoQ = getVideoQuests().find(q => q.id === quest.id);
@@ -756,7 +795,7 @@ function UnifiedQuestList() {
                 notify();
             }, 1_500);
         } else {
-            showToast("Could not enroll — you may be ineligible or the quest ended.", Toasts.Type.FAILURE);
+            questToast("Couldn't enroll — ineligible or quest ended", "error");
         }
         setEnrollingId(null);
     };
@@ -919,7 +958,7 @@ function PresenceOverrideSection() {
         setQuery(app.name);
         setShowDropdown(false);
         dispatchPresence(app.id, app.name);
-        showToast(`Presence set to ${app.name}`, Toasts.Type.SUCCESS);
+        questToast(`Presence: ${app.name}`, "success");
         notify();
     };
 
@@ -927,7 +966,7 @@ function PresenceOverrideSection() {
         presenceOverride = null;
         setQuery("");
         refreshPresence();
-        showToast("Presence override cleared", Toasts.Type.MESSAGE);
+        questToast("Presence override cleared", "info");
         notify();
     };
 
@@ -1035,9 +1074,9 @@ function QuestPanel() {
         setRefreshing(true);
         try {
             await Promise.resolve(QuestsFetcher.fetchQuests?.());
-            showToast("Synced quests from Discord", Toasts.Type.MESSAGE);
+            questToast("Quests synced", "info");
         } catch {
-            showToast("Could not refresh quests", Toasts.Type.FAILURE);
+            questToast("Quest sync failed", "error");
         } finally {
             setRefreshing(false);
             notify();
@@ -1088,7 +1127,7 @@ function QuestPanel() {
                     size={Button.Sizes.SMALL}
                     disabled={!getVideoQuests().length || videoRunning.size > 0}
                     onClick={() => completeVideoQuests().catch(e =>
-                        showToast(e instanceof Error ? e.message : String(e), Toasts.Type.FAILURE))}
+                        questToast(e instanceof Error ? e.message : String(e), "error"))}
                 >
                     All video quests
                 </Button>
@@ -1097,13 +1136,13 @@ function QuestPanel() {
                     onClick={() => {
                         const list = getGameQuests().filter(q => !runners.has(q.id));
                         if (!list.length) {
-                            showToast("No enrolled game quests to start.", Toasts.Type.MESSAGE);
+                            questToast("No enrolled game quests", "error");
                             return;
                         }
                         const n = scheduleStaggeredGameStarts(list);
-                        showToast(
-                            `Starting ${n} quest(s) ${GAME_START_STAGGER_MS / 1000}s apart (Discord matches presence to each heartbeat).`,
-                            Toasts.Type.MESSAGE,
+                        questToast(
+                            `Starting ${n} game quest(s) (${GAME_START_STAGGER_MS / 1000}s apart)`,
+                            "info",
                         );
                     }}
                 >
@@ -1116,7 +1155,7 @@ function QuestPanel() {
                     onClick={() => {
                         const n = runners.size;
                         stopAllGameQuests();
-                        showToast(n ? `Stopped ${n} game loop(s)` : "Nothing to stop", Toasts.Type.MESSAGE);
+                        questToast(n ? `Stopped ${n} game loop(s)` : "Nothing running", "info");
                     }}
                 >
                     Stop all games
@@ -1189,8 +1228,10 @@ export default definePlugin({
             description: "Send watch / mobile-watch progress for all enrolled video quests",
             execute: async () => {
                 completeVideoQuests().catch(e =>
-                    showToast(e instanceof Error ? e.message : String(e), Toasts.Type.FAILURE));
-                return { content: "Video progress started — watch the toasts for results." };
+                    questToast(e instanceof Error ? e.message : String(e), "error"));
+                return { content: settings.store.quietMode
+                    ? "Video progress started — check the quest panel for status."
+                    : "Video progress started — watch the toasts for results." };
             },
         },
         {

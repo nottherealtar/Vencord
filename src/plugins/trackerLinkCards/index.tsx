@@ -21,23 +21,25 @@ import { React, showToast, Toasts } from "@webpack/common";
 import {
     clearLeetifyCache,
     fetchLeetifyProfile,
+    formatLastMatchShareMessage,
     formatShareBlock,
     formatShareMessage,
     messageContainsLeetifyLink,
+    parseAllLeetifyLinksFromMessage,
     parseLeetifyUrls,
-    parseLeetifyUrlsFromMessage,
 } from "./leetify";
+import { LeetifyMatchCard } from "./MatchCard";
 import { LeetifyTrackerCard } from "./TrackerCard";
 
 const settings = definePluginSettings({
     mySteamId: {
         type: OptionType.STRING,
-        description: "Your Steam64 ID for Share Stats / /cs2stats (17-digit number from your Steam profile URL). Settings save automatically.",
+        description: "Your Steam64 ID for /cs2stats, /cs2last, and highlighting you on match cards. Settings save automatically.",
         default: "",
     },
     leetifyApiKey: {
         type: OptionType.STRING,
-        description: "Optional API key from leetify.com/app/developer — higher rate limits for stat cards (saves automatically)",
+        description: "Optional API key from leetify.com/app/developer — higher rate limits (saves automatically)",
         default: "",
         onChange() {
             clearLeetifyCache();
@@ -48,9 +50,19 @@ const settings = definePluginSettings({
         description: "Show Leetify stat cards under messages (Vencord users)",
         default: true,
     },
+    showLastMatch: {
+        type: OptionType.BOOLEAN,
+        description: "On profile cards, show the player's most recent finished match",
+        default: true,
+    },
+    showMatchCards: {
+        type: OptionType.BOOLEAN,
+        description: "Show cards for leetify.com/app/match-details/… links",
+        default: true,
+    },
     appendStatsOnSend: {
         type: OptionType.BOOLEAN,
-        description: "When you send a Leetify link, append a formatted stat block everyone can read",
+        description: "When you send a Leetify profile link, append a formatted stat block everyone can read",
         default: true,
     },
 });
@@ -110,6 +122,20 @@ async function sendMyStats(channelId: string) {
     showToast("CS2 stats posted", Toasts.Type.SUCCESS);
 }
 
+async function sendMyLastMatch(channelId: string) {
+    const profile = await loadMyProfile();
+    if (!profile) return;
+
+    const message = formatLastMatchShareMessage(profile);
+    if (!message) {
+        showToast("No recent match on Leetify yet — finish a game and wait for sync", Toasts.Type.MESSAGE);
+        return;
+    }
+
+    await sendMessage(channelId, { content: message });
+    showToast("Last match posted", Toasts.Type.SUCCESS);
+}
+
 const ShareStatsButton: ChatBarButtonFactory = ({ isAnyChat }) => {
     if (!isAnyChat) return null;
 
@@ -126,25 +152,41 @@ const ShareStatsButton: ChatBarButtonFactory = ({ isAnyChat }) => {
 function TrackerMessageAccessory({ message }: { message: Message; }) {
     if (!settings.store.showCards) return null;
 
-    const links = parseLeetifyUrlsFromMessage(message);
-    if (!links.length) return null;
+    const links = parseAllLeetifyLinksFromMessage(message);
+    const cards = links.filter(item =>
+        item.kind === "profile" || settings.store.showMatchCards
+    );
+    if (!cards.length) return null;
+
+    const highlightSteamId = getMySteamId() || undefined;
+    const apiKey = settings.store.leetifyApiKey;
 
     return (
         <div className="vc-tracker-card-stack">
-            {links.map(link => (
-                <LeetifyTrackerCard
-                    key={`${message.id}-${link.id}`}
-                    link={link}
-                    apiKey={settings.store.leetifyApiKey}
-                />
-            ))}
+            {cards.map(item => item.kind === "profile"
+                ? (
+                    <LeetifyTrackerCard
+                        key={`${message.id}-p-${item.link.id}`}
+                        link={item.link}
+                        apiKey={apiKey}
+                        showLastMatch={settings.store.showLastMatch}
+                    />
+                )
+                : (
+                    <LeetifyMatchCard
+                        key={`${message.id}-m-${item.link.gameId}`}
+                        link={item.link}
+                        apiKey={apiKey}
+                        highlightSteamId={highlightSteamId}
+                    />
+                ))}
         </div>
     );
 }
 
 export default definePlugin({
     name: "TrackerLinkCards",
-    description: "CS2 Leetify link cards and one-click stat sharing for your stack. Chat bar button (right of input) or /cs2stats.",
+    description: "CS2 Leetify profile + match cards and stat sharing. Chat bar button, /cs2stats, /cs2last.",
     tags: ["CS2", "Chat", "Gaming"],
     authors: [{ name: "nottherealtar", id: 0n }],
     requiresRestart: false,
@@ -156,15 +198,22 @@ export default definePlugin({
     },
 
     renderMessageAccessory: props => <TrackerMessageAccessory message={props.message} />,
-    /** Just above Discord link embeds — same slot as MessageLinkEmbeds. */
     messageAccessoryPosition: 4,
 
-    commands: [{
-        name: "cs2stats",
-        description: "Post your CS2 Leetify stats in this channel",
-        inputType: ApplicationCommandInputType.BUILT_IN,
-        execute: async (_, ctx) => sendMyStats(ctx.channel.id),
-    }],
+    commands: [
+        {
+            name: "cs2stats",
+            description: "Post your CS2 Leetify profile stats in this channel",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            execute: async (_, ctx) => sendMyStats(ctx.channel.id),
+        },
+        {
+            name: "cs2last",
+            description: "Post your last finished CS2 match stats from Leetify",
+            inputType: ApplicationCommandInputType.BUILT_IN,
+            execute: async (_, ctx) => sendMyLastMatch(ctx.channel.id),
+        },
+    ],
 
     start() {
         clearLeetifyCache();
@@ -174,13 +223,13 @@ export default definePlugin({
         if (!settings.store.appendStatsOnSend || !messageObj.content) return;
         if (!messageContainsLeetifyLink(messageObj.content)) return;
 
-        const links = parseLeetifyUrls(messageObj.content);
-        if (!links.length) return;
+        const profileLinks = parseLeetifyUrls(messageObj.content);
+        if (!profileLinks.length) return;
 
         if (/· CS2 \(Leetify\)/.test(messageObj.content)) return;
 
         try {
-            const profile = await fetchLeetifyProfile(links[0].id, settings.store.leetifyApiKey);
+            const profile = await fetchLeetifyProfile(profileLinks[0].id, settings.store.leetifyApiKey);
             messageObj.content += formatShareBlock(profile);
         } catch {
             // Keep the raw link if stats aren't available.
