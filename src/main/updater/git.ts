@@ -23,6 +23,7 @@ import { join } from "path";
 import { promisify } from "util";
 
 import { serializeErrors } from "./common";
+import { RendererSettings } from "../settings";
 
 const VENCORD_SRC_DIR = join(__dirname, "..");
 
@@ -71,6 +72,27 @@ async function pull() {
     return res.stdout.includes("Fast-forward");
 }
 
+async function injectDiscord() {
+    if (RendererSettings.store.autoInject === false) return true;
+
+    const opts = {
+        cwd: VENCORD_SRC_DIR,
+        env: {
+            ...process.env,
+            VENCORD_USER_DATA_DIR: VENCORD_SRC_DIR,
+            VENCORD_DEV_INSTALL: "1",
+        },
+    };
+
+    const command = isFlatpak ? "flatpak-spawn" : "node";
+    const args = isFlatpak
+        ? ["--host", "node", "scripts/fork/autoInject.mjs"]
+        : ["scripts/fork/autoInject.mjs"];
+
+    await execFile(command, args, opts);
+    return true;
+}
+
 async function build() {
     const opts = { cwd: VENCORD_SRC_DIR };
 
@@ -81,7 +103,16 @@ async function build() {
 
     const res = await execFile(command, args, opts);
 
-    return !res.stderr.includes("Build failed");
+    if (res.stderr.includes("Build failed")) return false;
+
+    try {
+        await injectDiscord();
+    } catch (e) {
+        console.error("[Vencord] Auto-inject failed after update:", e);
+        return false;
+    }
+
+    return true;
 }
 
 ipcMain.handle(IpcEvents.GET_REPO, serializeErrors(getRepo));

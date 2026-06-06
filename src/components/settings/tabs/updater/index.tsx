@@ -30,7 +30,7 @@ import { Margins } from "@utils/margins";
 import { classes } from "@utils/misc";
 import { useAwaiter } from "@utils/react";
 import { getRepo, isNewer, UpdateLogger } from "@utils/updater";
-import { Forms, React } from "@webpack/common";
+import { Forms, React, Select } from "@webpack/common";
 
 import gitHash from "~git-hash";
 
@@ -65,7 +65,13 @@ function VesktopSection() {
 }
 
 function Updater() {
-    const settings = useSettings(["autoUpdate", "autoUpdateNotification"]);
+    const settings = useSettings([
+        "autoUpdate",
+        "autoUpdateNotification",
+        "autoInject",
+        "discordInstallBranch",
+        "discordInstallLocation"
+    ]);
 
     const [repo, err, repoPending] = useAwaiter(getRepo, {
         fallbackValue: "Loading...",
@@ -83,9 +89,16 @@ function Updater() {
 
             <FormSwitch
                 title="Automatically update"
-                description="Check for updates on Discord launch and every 30 minutes. Pulls from your fork on GitHub, rebuilds, and loads the new version before Discord opens."
+                description="Check for updates on Discord launch and every 30 minutes. Pulls from your fork on GitHub, rebuilds, injects, and loads the new version before Discord opens."
                 value={settings.autoUpdate}
                 onChange={(v: boolean) => settings.autoUpdate = v}
+            />
+            <FormSwitch
+                title="Automatically inject after update"
+                description="Re-patch Discord with the latest build after each update (uses --branch auto by default, or your custom install path below)"
+                value={settings.autoInject}
+                onChange={(v: boolean) => settings.autoInject = v}
+                disabled={!settings.autoUpdate}
             />
             <FormSwitch
                 title="Get notified when an automatic update completes"
@@ -93,6 +106,31 @@ function Updater() {
                 value={settings.autoUpdateNotification}
                 onChange={(v: boolean) => settings.autoUpdateNotification = v}
                 disabled={!settings.autoUpdate}
+            />
+
+            <Forms.FormTitle tag="h5" className={Margins.top20}>Discord install</Forms.FormTitle>
+            <Forms.FormText className={Margins.bottom8}>
+                Used for auto-inject. Leave the custom path empty to patch by branch.
+            </Forms.FormText>
+            <Select
+                options={[
+                    { label: "Auto (first found)", value: "auto", default: true },
+                    { label: "Stable", value: "stable" },
+                    { label: "PTB", value: "ptb" },
+                    { label: "Canary", value: "canary" },
+                ]}
+                select={v => settings.discordInstallBranch = v}
+                isSelected={v => v === settings.discordInstallBranch}
+                serialize={v => String(v)}
+                closeOnSelect={true}
+                disabled={!settings.autoInject || !!settings.discordInstallLocation}
+            />
+            <Forms.FormText className={Margins.top8}>Custom install path (optional)</Forms.FormText>
+            <Forms.FormTextInput
+                value={settings.discordInstallLocation}
+                placeholder="C:\Users\you\AppData\Local\Discord"
+                onChange={(v: string) => settings.discordInstallLocation = v}
+                disabled={!settings.autoInject}
             />
 
             <Forms.FormTitle tag="h5" className={Margins.top20}>Repo</Forms.FormTitle>
